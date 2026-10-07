@@ -3,8 +3,6 @@
 API REST de gestión ganadera y atención veterinaria (modular monolith con **DDD**), construida con
 **Java 21 + Spring Boot 3.3 + PostgreSQL**, lista para desplegarse en **Render.com**.
 
-Especificación completa: [`../anitec-backend-spec.md`](../anitec-backend-spec.md).
-
 ---
 
 ## Contenido
