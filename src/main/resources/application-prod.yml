@@ -1,0 +1,16 @@
+# Production profile (Render): all secrets/values come from environment variables.
+spring:
+  jpa:
+    show-sql: false
+  flyway:
+    placeholders:
+      demo_seed: ${DEMO_SEED:false}   # demo users are not seeded in production
+
+logging:
+  level:
+    com.anitec.backend: INFO
+
+# Swagger stays publicly reachable (decision #20 of the spec).
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

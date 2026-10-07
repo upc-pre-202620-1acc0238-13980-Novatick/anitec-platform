@@ -1,0 +1,49 @@
+# Render blueprint (spec section 13.2): backend web service + managed PostgreSQL.
+#
+# The Git repository root contains the spec/report files; the backend lives in
+# anitec-backend/. When creating the Blueprint in the Render dashboard, set
+# "Blueprint Path" to: anitec-backend/render.yaml
+# (dockerfilePath/dockerContext below are resolved from the repository root.)
+services:
+  - type: web
+    name: anitec-backend
+    runtime: docker
+    dockerfilePath: ./anitec-backend/Dockerfile
+    dockerContext: ./anitec-backend
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: PORT
+        value: 8080
+      - key: DATABASE_URL            # Render-managed Postgres (postgres://...) - converted to JDBC at boot
+        fromDatabase:
+          name: anitec-db
+          property: connectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: anitec-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: anitec-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true          # replace with a stable >=256-bit secret for zero-downtime deploys
+      - key: ADMIN_SEED_PASSWORD_HASH   # bcrypt hash for the admin account (see README); set BEFORE first deploy
+        sync: false
+      - key: RESEND_API_KEY           # optional; console fallback logs codes when absent
+        sync: false
+      - key: RESEND_FROM
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: ADMIN_SEED_EMAIL
+        value: admin@anitec.pe
+      - key: DEMO_SEED
+        value: "false"               # demo accounts are not seeded in production
+
+databases:
+  - name: anitec-db
+    databaseName: anitec
+    plan: free
