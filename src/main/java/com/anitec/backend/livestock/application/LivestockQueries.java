@@ -44,7 +44,7 @@ public class LivestockQueries {
     // ------------------------------------------------------------- records
 
     public record AnimalListItem(UUID id, String code, String name, String species, UUID speciesId,
-                                 Animal.Status status, UUID farmId, UUID ownerId) {
+                                 Animal.Status status, UUID farmId, UUID ownerId, Long version) {
     }
 
     public record SpeciesView(UUID id, String name, String description, String photoUrl) {
@@ -65,7 +65,7 @@ public class LivestockQueries {
         return animals.search(ownerScope, farmId, speciesId, status, query).stream()
                 .map(animal -> new AnimalListItem(animal.getId(), animal.codeValue(), animal.getName(),
                         speciesNames.get(animal.getSpeciesId()), animal.getSpeciesId(),
-                        animal.getStatus(), animal.getFarmId(), animal.getOwnerId()))
+                        animal.getStatus(), animal.getFarmId(), animal.getOwnerId(), animal.getVersion()))
                 .toList();
     }
 
@@ -74,6 +74,10 @@ public class LivestockQueries {
             return 0;
         }
         return animals.countActiveByOwners(ownerScope);
+    }
+
+    public long countActiveInFarm(Collection<UUID> ownerScope, UUID farmId) {
+        return ownerScope == null || ownerScope.isEmpty() ? 0 : animals.countActiveInFarm(ownerScope, farmId);
     }
 
     /** Returns the animal when its owner is inside the caller's scope; 403 otherwise. */

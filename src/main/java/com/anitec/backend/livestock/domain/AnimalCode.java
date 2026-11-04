@@ -2,10 +2,10 @@ package com.anitec.backend.livestock.domain;
 
 import com.anitec.backend.shared.domain.DomainException;
 import lombok.Getter;
+import java.util.Locale;
 
 /**
- * AnimalCode value object: a non-empty, immutable code assigned by the farmer
- * (e.g. BOV-024). Unique per farm across all statuses (spec section 9.4).
+ * Normalized inventory label, unique per owner across current and historical reservations.
  */
 @Getter
 public class AnimalCode {
@@ -20,10 +20,11 @@ public class AnimalCode {
         if (value == null || value.isBlank()) {
             throw DomainException.badRequest("VALIDATION_ERROR", "code: es obligatorio");
         }
-        String trimmed = value.trim();
-        if (trimmed.length() > 50) {
-            throw DomainException.badRequest("VALIDATION_ERROR", "code: máximo 50 caracteres");
+        String trimmed = value.strip();
+        if (!trimmed.matches("[A-Za-z0-9-]{1,30}") || !trimmed.matches(".*[A-Za-z0-9].*")) {
+            throw DomainException.badRequest("VALIDATION_ERROR",
+                    "code: use entre 1 y 30 letras ASCII, números o guiones, con al menos una letra o número");
         }
-        return new AnimalCode(trimmed);
+        return new AnimalCode(trimmed.toUpperCase(Locale.ROOT));
     }
 }

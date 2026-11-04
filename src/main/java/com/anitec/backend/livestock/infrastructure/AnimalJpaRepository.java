@@ -9,10 +9,6 @@ import java.util.UUID;
 public interface AnimalJpaRepository extends JpaRepository<AnimalJpaEntity, UUID>,
         JpaSpecificationExecutor<AnimalJpaEntity> {
 
-    boolean existsByFarmIdAndCode(UUID farmId, String code);
-
-    boolean existsByFarmIdAndCodeAndIdNot(UUID farmId, String code, UUID excludedAnimalId);
-
 
     long countByFarmId(UUID farmId);
 

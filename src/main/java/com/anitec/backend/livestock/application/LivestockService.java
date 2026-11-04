@@ -1,6 +1,8 @@
 package com.anitec.backend.livestock.application;
 
 import com.anitec.backend.livestock.domain.Animal;
+import com.anitec.backend.livestock.domain.AnimalCode;
+import com.anitec.backend.livestock.domain.AnimalCodeRegistry;
 import com.anitec.backend.livestock.domain.AnimalObservation;
 import com.anitec.backend.livestock.domain.AnimalRepository;
 import com.anitec.backend.livestock.domain.Farm;
@@ -35,14 +37,16 @@ public class LivestockService {
     private final SpeciesRepository species;
     private final InventoryCapacityRepository capacities;
     private final DomainEventDispatcher events;
+    private final AnimalCodeRegistry codes;
 
     public LivestockService(FarmRepository farms, AnimalRepository animals, SpeciesRepository species,
-                            InventoryCapacityRepository capacities, DomainEventDispatcher events) {
+                            InventoryCapacityRepository capacities, DomainEventDispatcher events, AnimalCodeRegistry codes) {
         this.farms = farms;
         this.animals = animals;
         this.species = species;
         this.capacities = capacities;
         this.events = events;
+        this.codes = codes;
     }
 
     // ---------------------------------------------------------------- farms
@@ -59,14 +63,16 @@ public class LivestockService {
                                  String name, String breed, LocalDate birthDate, String photoUrl) {
         Farm farm = requireOwnedFarm(callerId, farmId);
         requireSpecies(speciesId);
-        requireCodeAvailable(farm.getId(), code, null);
+        codes.lockOwner(callerId);
+        code = code == null || code.isBlank() ? codes.nextAvailable(callerId) : AnimalCode.of(code).getValue();
+        requireCodeAvailable(callerId, code, null);
 
         InventoryCapacity capacity = requireCapacity(callerId);
         capacity.occupySlot(); // throws INVENTORY_LIMIT_REACHED when the plan limit is met (US01)
 
         Animal animal = Animal.register(farm.getId(), callerId, code, speciesId, sex,
                 name, breed, birthDate, photoUrl, Instant.now());
-        animals.save(animal);
+        animal = animals.save(animal);
         capacities.save(capacity);
         events.publish(new Animal.AnimalRegistered(animal.getId(), callerId, farm.getId()));
         return animal;
@@ -74,10 +80,15 @@ public class LivestockService {
 
     @Transactional
     public Animal updateAnimal(UUID callerId, UUID animalId, String code, UUID speciesId, Animal.Sex sex,
-                               String name, String breed, LocalDate birthDate, String photoUrl) {
+                               String name, String breed, LocalDate birthDate, String photoUrl, Long expectedVersion) {
+        codes.lockOwner(callerId);
         Animal animal = requireOwnedAnimal(callerId, animalId);
+        if (expectedVersion == null || !expectedVersion.equals(animal.getVersion())) {
+            throw DomainException.conflict("ANIMAL_VERSION_CONFLICT", "El animal cambió; consulte sus datos antes de guardar");
+        }
         requireSpecies(speciesId);
-        requireCodeAvailable(animal.getFarmId(), code, animal.getId());
+        code = AnimalCode.of(code).getValue();
+        requireCodeAvailable(callerId, code, animal.getId());
         animal.updateDetails(code, speciesId, sex, name, breed, birthDate, photoUrl, Instant.now());
         return animals.save(animal);
     }
@@ -85,6 +96,7 @@ public class LivestockService {
     /** Soft deactivation (US05): releases exactly one slot, idempotent. */
     @Transactional
     public Animal deactivateAnimal(UUID callerId, UUID animalId) {
+        codes.lockOwner(callerId);
         Animal animal = requireOwnedAnimal(callerId, animalId);
         if (!animal.isActive()) {
             return animal; // repeated request: no additional slot release
@@ -100,6 +112,7 @@ public class LivestockService {
 
     @Transactional
     public Animal changeAnimalStatus(UUID callerId, UUID animalId, Animal.Status newStatus) {
+        codes.lockOwner(callerId);
         Animal animal = requireOwnedAnimal(callerId, animalId);
         if (animal.getStatus() == newStatus) {
             return animal; // idempotent
@@ -193,10 +206,10 @@ public class LivestockService {
         }
     }
 
-    private void requireCodeAvailable(UUID farmId, String code, UUID excludedAnimalId) {
-        if (animals.existsByFarmIdAndCode(farmId, code, excludedAnimalId)) {
+    private void requireCodeAvailable(UUID ownerId, String code, UUID excludedAnimalId) {
+        if (codes.reservedByOther(ownerId, code, excludedAnimalId)) {
             throw DomainException.conflict("DUPLICATE_ANIMAL_CODE",
-                    "Ya existe un animal con ese código en la finca");
+                    "El código ya está reservado para otro animal de su inventario");
         }
     }
 

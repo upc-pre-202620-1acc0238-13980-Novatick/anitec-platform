@@ -108,6 +108,6 @@ public class FarmController {
         List<LivestockQueries.AnimalListItem> content =
                 livestockQueries.search(scope, farmId, species, status, search);
         return ResponseEntity.ok(ApiResponse.ok(
-                new FarmAnimalsResponse(livestockQueries.countActive(scope), content)));
+                new FarmAnimalsResponse(livestockQueries.countActiveInFarm(scope, farmId), content)));
     }
 }

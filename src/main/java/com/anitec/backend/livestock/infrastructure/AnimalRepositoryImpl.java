@@ -6,6 +6,9 @@ import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import com.anitec.backend.shared.domain.DomainException;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -29,20 +32,22 @@ public class AnimalRepositoryImpl implements AnimalRepository {
 
     @Override
     public Animal save(Animal animal) {
-        return jpa.save(AnimalJpaEntity.fromDomain(animal)).toDomain();
+        try {
+            return jpa.saveAndFlush(AnimalJpaEntity.fromDomain(animal)).toDomain();
+        } catch (ObjectOptimisticLockingFailureException conflict) {
+            throw DomainException.conflict("ANIMAL_VERSION_CONFLICT", "El animal cambió; vuelva a consultar sus datos");
+        } catch (DataIntegrityViolationException conflict) {
+            String cause = String.valueOf(conflict.getMostSpecificCause().getMessage());
+            if (cause.contains("uq_animal_codes_owner_code") || cause.contains("uq_livestock_animal_owner_code")) {
+                throw DomainException.conflict("DUPLICATE_ANIMAL_CODE", "El código está reservado para otro animal de su inventario");
+            }
+            throw conflict;
+        }
     }
 
     @Override
     public Optional<Animal> findById(UUID animalId) {
         return jpa.findById(animalId).map(AnimalJpaEntity::toDomain);
-    }
-
-    @Override
-    public boolean existsByFarmIdAndCode(UUID farmId, String code, UUID excludedAnimalId) {
-        if (excludedAnimalId == null) {
-            return jpa.existsByFarmIdAndCode(farmId, code);
-        }
-        return jpa.existsByFarmIdAndCodeAndIdNot(farmId, code, excludedAnimalId);
     }
 
     @Override
@@ -56,6 +61,11 @@ public class AnimalRepositoryImpl implements AnimalRepository {
     @Override
     public long countActiveByOwners(Collection<UUID> ownerScope) {
         return jpa.count(searchSpec(ownerScope, null, null, Animal.Status.ACTIVO, null));
+    }
+
+    @Override
+    public long countActiveInFarm(Collection<UUID> ownerScope, UUID farmId) {
+        return jpa.count(searchSpec(ownerScope, farmId, null, Animal.Status.ACTIVO, null));
     }
 
 
