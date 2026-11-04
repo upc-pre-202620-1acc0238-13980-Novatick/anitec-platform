@@ -39,6 +39,11 @@ public class AccountRepositoryImpl implements AccountRepository {
     }
 
     @Override
+    public Optional<Account> findByEmailForUpdate(String email) {
+        return jpa.findByEmailForUpdate(email).map(AccountJpaEntity::toDomain);
+    }
+
+    @Override
     public boolean existsByEmail(String email) {
         return jpa.existsByEmail(email);
     }

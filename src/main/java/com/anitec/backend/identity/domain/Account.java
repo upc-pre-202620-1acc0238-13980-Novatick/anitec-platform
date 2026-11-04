@@ -10,6 +10,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -125,8 +126,9 @@ public class Account {
 
     /** Generates (or replaces) the 6 digit verification code applying the policy. */
     public String issueVerificationCode(Instant now) {
-        if (verificationCode != null) {
-            if (verificationSentAt != null && now.isBefore(verificationSentAt.plus(RESEND_COOLDOWN))) {
+        requirePendingVerification();
+        if (verificationSentAt != null) {
+            if (now.isBefore(verificationSentAt.plus(RESEND_COOLDOWN))) {
                 throw DomainException.tooManyRequests("RESEND_COOLDOWN",
                         "Espere 60 segundos antes de solicitar otro código de verificación");
             }
@@ -136,7 +138,10 @@ public class Account {
             }
             verificationResends++;
         }
-        verificationCode = randomCode();
+        String previous = verificationCode;
+        do {
+            verificationCode = randomCode();
+        } while (verificationCode.equals(previous));
         verificationExpiresAt = now.plus(CODE_TTL);
         verificationAttempts = 0;
         verificationSentAt = now;
@@ -146,16 +151,17 @@ public class Account {
 
     /** Verifies the e-mail (US26). Sending a code never equals verifying it. */
     public void verifyEmail(String code, Instant now) {
+        requirePendingVerification();
+        if (verificationAttempts >= MAX_CODE_ATTEMPTS) {
+            throw DomainException.business("CODE_ATTEMPTS_EXCEEDED",
+                    "Se agotaron los intentos de verificación; solicite un código nuevo");
+        }
         if (verificationCode == null) {
             throw DomainException.business("INVALID_CODE",
                     "No hay un código de verificación vigente; solicite uno nuevo");
         }
-        if (now.isAfter(verificationExpiresAt)) {
+        if (!now.isBefore(verificationExpiresAt)) {
             throw DomainException.business("CODE_EXPIRED", "El código de verificación expiró; solicite uno nuevo");
-        }
-        if (verificationAttempts >= MAX_CODE_ATTEMPTS) {
-            throw DomainException.business("CODE_ATTEMPTS_EXCEEDED",
-                    "Se agotaron los intentos de verificación; solicite un código nuevo");
         }
         boolean matches = MessageDigest.isEqual(
                 code == null ? new byte[0] : code.getBytes(java.nio.charset.StandardCharsets.UTF_8),
@@ -201,6 +207,12 @@ public class Account {
 
     // ------------------------------------------------------------- helpers
 
+    private void requirePendingVerification() {
+        if (status != Status.PENDIENTE) {
+            throw DomainException.business("INVALID_CODE", "La cuenta no tiene una verificación pendiente");
+        }
+    }
+
     public static String normalizeEmail(String email) {
         return email == null ? null : email.trim().toLowerCase();
     }
@@ -212,7 +224,7 @@ public class Account {
     }
 
     private static String randomCode() {
-        return String.format("%06d", RANDOM.nextInt(1_000_000));
+        return String.format(Locale.ROOT, "%06d", RANDOM.nextInt(1_000_000));
     }
 
     public String fullName() {
