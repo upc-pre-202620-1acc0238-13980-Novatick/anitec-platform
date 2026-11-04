@@ -5,6 +5,7 @@ import com.anitec.backend.care.domain.CareRecord;
 import com.anitec.backend.care.domain.CareRecordRepository;
 import com.anitec.backend.care.domain.VeterinaryAppointment;
 import com.anitec.backend.identity.application.IdentityQueries;
+import com.anitec.backend.linking.application.LinkingQueryService;
 import com.anitec.backend.livestock.application.LivestockQueries;
 import com.anitec.backend.shared.domain.DomainException;
 import org.springframework.stereotype.Service;
@@ -33,13 +34,16 @@ public class CareQueries {
     private final CareRecordRepository records;
     private final IdentityQueries identityQueries;
     private final LivestockQueries livestockQueries;
+    private final LinkingQueryService linkingQueries;
 
     public CareQueries(AppointmentRepository appointments, CareRecordRepository records,
-                       IdentityQueries identityQueries, LivestockQueries livestockQueries) {
+                       IdentityQueries identityQueries, LivestockQueries livestockQueries,
+                       LinkingQueryService linkingQueries) {
         this.appointments = appointments;
         this.records = records;
         this.identityQueries = identityQueries;
         this.livestockQueries = livestockQueries;
+        this.linkingQueries = linkingQueries;
     }
 
     // ------------------------------------------------------------- records
@@ -116,8 +120,11 @@ public class CareQueries {
 
     /** US08: agenda of the veterinarian for the requested period, ordered by date. */
     public List<AppointmentView> agenda(UUID veterinarianId, Instant from, Instant to) {
+        var activeFarmerIds = linkingQueries.activeFarmerIds(veterinarianId);
         List<VeterinaryAppointment> found =
-                appointments.findByVeterinarianAndRange(veterinarianId, from, to);
+                appointments.findByVeterinarianAndRange(veterinarianId, from, to).stream()
+                        .filter(appointment -> activeFarmerIds.contains(appointment.getOwnerId()))
+                        .toList();
         Map<UUID, String> farmers = identityQueries.displayNames(
                 found.stream().map(VeterinaryAppointment::getOwnerId).toList());
         return found.stream()

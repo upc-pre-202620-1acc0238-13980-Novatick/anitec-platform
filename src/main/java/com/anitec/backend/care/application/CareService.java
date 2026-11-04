@@ -95,6 +95,15 @@ public class CareService {
                                                    VeterinaryAppointment.Status newStatus) {
         VeterinaryAppointment appointment = appointments.findById(appointmentId)
                 .orElseThrow(() -> DomainException.notFound("Cita no encontrada"));
+        if (!appointment.isAssignedTo(veterinarianId)) {
+            throw DomainException.forbidden("Solo el veterinario asignado puede modificar esta cita");
+        }
+        requireLink(veterinarianId, appointment.getOwnerId());
+        if (newStatus == VeterinaryAppointment.Status.COMPLETADA
+                && !records.existsByAppointmentId(appointmentId)) {
+            throw DomainException.conflict("ATTENTION_REQUIRED",
+                    "Registre la atención clínica correspondiente antes de completar la cita");
+        }
         appointment.changeStatus(newStatus, veterinarianId, Instant.now());
         return appointments.save(appointment);
     }

@@ -11,6 +11,8 @@ public interface CareRecordRepository {
 
     Optional<CareRecord> findById(UUID careRecordId);
 
+    boolean existsByAppointmentId(UUID appointmentId);
+
     List<CareRecord> findByAnimalIdOrderByAttentionDateDesc(UUID animalId);
 
     long countByAnimalId(UUID animalId);

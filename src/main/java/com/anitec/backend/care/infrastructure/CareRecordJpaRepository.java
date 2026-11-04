@@ -8,6 +8,8 @@ import java.util.UUID;
 /** Spring Data repository for {@code care_records}. */
 public interface CareRecordJpaRepository extends JpaRepository<CareRecordJpaEntity, UUID> {
 
+    boolean existsByAppointmentId(UUID appointmentId);
+
     List<CareRecordJpaEntity> findByAnimalIdOrderByAttentionDateDesc(UUID animalId);
 
     long countByAnimalId(UUID animalId);
