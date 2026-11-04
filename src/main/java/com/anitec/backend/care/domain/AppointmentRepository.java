@@ -11,6 +11,9 @@ public interface AppointmentRepository {
 
     Optional<VeterinaryAppointment> findById(UUID appointmentId);
 
+    /** Serialize clinical registration and state changes within the caller's transaction. */
+    Optional<VeterinaryAppointment> findByIdForUpdate(UUID appointmentId);
+
     List<VeterinaryAppointment> findByVeterinarianAndRange(UUID veterinarianId, java.time.Instant from,
                                                            java.time.Instant to);
 }

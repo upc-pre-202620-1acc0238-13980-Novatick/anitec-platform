@@ -2,6 +2,7 @@ package com.anitec.backend;
 
 import com.anitec.backend.identity.domain.AccountRepository;
 import com.anitec.backend.care.domain.CareRecord;
+import com.anitec.backend.care.domain.CareRecordRepository;
 import com.anitec.backend.shared.domain.DomainException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -25,8 +28,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.IntFunction;
 import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Diagnostic regressions against US07-US09, US12-US13 and US18.
  * Preserves the diagnostic cases and verifies the authorized production corrections.
- * The multiple-attention test characterizes behavior, not an approved cardinality rule.
+ * Each visit/control now permits at most one associated attention, including concurrent requests.
  */
 @Testcontainers
 @ActiveProfiles("test")
@@ -49,6 +57,8 @@ class VeterinaryCareRegressionTests {
     @Autowired ObjectMapper mapper;
     @Autowired AccountRepository accounts;
     @Autowired JdbcTemplate jdbc;
+    @Autowired CareRecordRepository records;
+    @Autowired PlatformTransactionManager transactions;
     private final HttpClient http = HttpClient.newHttpClient();
 
     record Response(int status, JsonNode body) {
@@ -313,6 +323,7 @@ class VeterinaryCareRegressionTests {
         assertThat(agenda.data().get(1).path("id").asText()).isEqualTo(control);
         assertThat(agenda.data().get(1).path("type").asText()).isEqualTo("CONTROL");
         String followUpAttention = attentionId(scenario, control);
+        assertThat(call("POST", "/attentions", attention(scenario, control), scenario.vet).status()).isEqualTo(409);
         assertThat(followUpAttention).isNotEqualTo(original);
         assertThat(visitStatus(control)).isEqualTo("COMPLETADA");
         assertThat(jdbc.queryForObject("SELECT origin_attention_id FROM care_appointments WHERE id=?",
@@ -361,13 +372,104 @@ class VeterinaryCareRegressionTests {
     }
 
     @Test
-    void characterizeMultipleAttentionsForSameVisitWithoutApprovingCardinality() {
+    void secondAttentionForSameVisitIsRejectedWithoutChangingHistory() {
         var scenario = scenario();
         String visit = visit(scenario);
         String first = attentionId(scenario, visit);
-        String second = attentionId(scenario, visit);
+        var second = call("POST", "/attentions", attention(scenario, visit), scenario.vet);
+        assertThat(second.status()).isEqualTo(409);
+        assertThat(second.body().path("errorCode").asText()).isEqualTo("ATTENTION_ALREADY_EXISTS");
+        assertThat(attentionCount(visit)).isEqualTo(1);
+        assertThat(call("GET", "/attentions/" + first, null, scenario.farmer).status()).isEqualTo(200);
+        assertThat(visitStatus(visit)).isEqualTo("COMPLETADA");
+    }
+
+    private List<Response> simultaneously(IntFunction<Response> action) throws Exception {
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var calls = java.util.stream.IntStream.range(0, 2).mapToObj(index -> executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Start timeout");
+                return action.apply(index);
+            })).toList();
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            return List.of(calls.get(0).get(30, TimeUnit.SECONDS), calls.get(1).get(30, TimeUnit.SECONDS));
+        }
+    }
+
+    private void assertSingleConcurrentAttention(Scenario scenario, String appointment) throws Exception {
+        var responses = simultaneously(index -> call("POST", "/attentions", attention(scenario, appointment), scenario.vet));
+        assertThat(responses).extracting(Response::status).containsExactlyInAnyOrder(201, 409);
+        assertThat(responses.stream().filter(response -> response.status() == 409).findFirst().orElseThrow()
+                .body().path("errorCode").asText()).isEqualTo("ATTENTION_ALREADY_EXISTS");
+        assertThat(attentionCount(appointment)).isEqualTo(1);
+        assertThat(visitStatus(appointment)).isEqualTo("COMPLETADA");
+    }
+
+    @Test
+    void concurrentVisitAttentionsCreateExactlyOneClinicalRecord() throws Exception {
+        var scenario = scenario();
+        assertSingleConcurrentAttention(scenario, visit(scenario));
+        assertThat(animalAttentionCount(scenario)).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentControlAttentionsPreserveOriginAndCreateExactlyOneNewRecord() throws Exception {
+        var scenario = scenario();
+        String original = attentionId(scenario, null);
+        assertSingleConcurrentAttention(scenario, control(scenario, original));
+        assertThat(animalAttentionCount(scenario)).isEqualTo(2);
+        assertThat(call("GET", "/attentions/" + original, null, scenario.farmer).status()).isEqualTo(200);
+    }
+
+    @Test
+    void multipleIndependentAttentionsRemainAllowed() {
+        var scenario = scenario();
+        String first = attentionId(scenario, null);
+        String second = attentionId(scenario, null);
         assertThat(second).isNotEqualTo(first);
-        assertThat(attentionCount(visit)).isEqualTo(2);
+        assertThat(animalAttentionCount(scenario)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM care_records WHERE animal_id=? AND appointment_id IS NULL",
+                Long.class, UUID.fromString(scenario.animalId))).isEqualTo(2);
+    }
+
+    @Test
+    void cancellationAndAttentionAreSerializedWithoutPartialRecords() throws Exception {
+        var scenario = scenario();
+        String visit = visit(scenario);
+        var responses = simultaneously(index -> index == 0
+                ? call("POST", "/attentions", attention(scenario, visit), scenario.vet)
+                : call("PATCH", "/visits/" + visit + "/status", Map.of("status", "CANCELADA"), scenario.vet));
+        if (responses.get(0).status() == 201) {
+            assertThat(responses.get(1).status()).isEqualTo(409);
+            assertThat(visitStatus(visit)).isEqualTo("COMPLETADA");
+            assertThat(attentionCount(visit)).isEqualTo(1);
+        } else {
+            assertThat(responses.get(0).status()).isEqualTo(409);
+            assertThat(responses.get(1).status()).isEqualTo(200);
+            assertThat(visitStatus(visit)).isEqualTo("CANCELADA");
+            assertThat(attentionCount(visit)).isZero();
+        }
+    }
+
+    @Test
+    void databaseUniqueViolationBecomesBusinessConflictAndRollsBackComplements() {
+        var scenario = scenario();
+        String visit = visit(scenario);
+        attentionId(scenario, visit);
+        var duplicate = CareRecord.register(UUID.fromString(scenario.animalId),
+                accounts.findByEmail(scenario.farmer.email).orElseThrow().getId(),
+                accounts.findByEmail(scenario.vet.email).orElseThrow().getId(), UUID.fromString(visit),
+                "Duplicate", "Must not persist", LocalDate.now(ZoneOffset.UTC).minusDays(1), Instant.now());
+        duplicate.addTreatment("Must roll back", LocalDate.now(ZoneOffset.UTC).minusDays(1));
+        assertThatThrownBy(() -> new TransactionTemplate(transactions).execute(status -> records.save(duplicate)))
+                .isInstanceOfSatisfying(DomainException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo("ATTENTION_ALREADY_EXISTS"));
+        assertThat(attentionCount(visit)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM care_treatments WHERE care_record_id=?",
+                Long.class, duplicate.getId())).isZero();
         assertThat(visitStatus(visit)).isEqualTo("COMPLETADA");
     }
 }
