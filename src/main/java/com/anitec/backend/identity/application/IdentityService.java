@@ -96,11 +96,18 @@ public class IdentityService {
         return new RegisterResult(account.getId(), account.getEmail(), sent ? "SENT" : "UNCONFIRMED");
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = DomainException.class)
     public void verifyEmail(String email, String code) {
-        Account account = accounts.findByEmail(Account.normalizeEmail(email))
+        Account account = accounts.findByEmailForUpdate(Account.normalizeEmail(email))
                 .orElseThrow(() -> DomainException.business("INVALID_CODE", "Código inválido o cuenta no encontrada"));
-        account.verifyEmail(code, Instant.now());
+        try {
+            account.verifyEmail(code, Instant.now());
+        } catch (DomainException failure) {
+            // Commit the failed-attempt state before returning the business error.
+            // Infrastructure failures still roll back normally.
+            accounts.save(account);
+            throw failure;
+        }
         accounts.save(account);
         events.publish(new Account.EmailVerified(account.getId()));
     }
@@ -110,13 +117,13 @@ public class IdentityService {
 
     @Transactional
     public EmailDelivery resendVerificationCode(String email) {
-        var found = accounts.findByEmail(Account.normalizeEmail(email));
+        var found = accounts.findByEmailForUpdate(Account.normalizeEmail(email));
         if (found.isEmpty()) {
             // Do not reveal whether the account exists (US26 does not cover it).
             return new EmailDelivery(email, "UNCONFIRMED");
         }
         Account account = found.get();
-        if (account.getStatus() == Account.Status.ACTIVA) {
+        if (account.getStatus() != Account.Status.PENDIENTE) {
             return new EmailDelivery(account.getEmail(), "UNCONFIRMED");
         }
         account.issueVerificationCode(Instant.now());

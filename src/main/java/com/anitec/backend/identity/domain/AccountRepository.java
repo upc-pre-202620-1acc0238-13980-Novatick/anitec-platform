@@ -19,6 +19,9 @@ public interface AccountRepository {
 
     Optional<Account> findByEmail(String email);
 
+    /** Serialize verification and resend commands for the same account within a transaction. */
+    Optional<Account> findByEmailForUpdate(String email);
+
     boolean existsByEmail(String email);
 
     /** Batch lookup used to resolve display names in other contexts. */

@@ -52,7 +52,7 @@ public class AuthController {
 
     public record VerifyRequest(
             @NotBlank @Email String email,
-            @NotBlank @Size(min = 6, max = 6, message = "debe tener 6 dígitos") String code) {
+            @NotBlank @Pattern(regexp = "[0-9]{6}", message = "debe tener 6 dígitos") String code) {
     }
 
     public record ResendCodeRequest(@NotBlank @Email String email) {
