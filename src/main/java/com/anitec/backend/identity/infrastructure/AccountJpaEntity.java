@@ -75,6 +75,11 @@ public class AccountJpaEntity {
     @Column(name = "verification_sent_at")
     private OffsetDateTime verificationSentAt;
 
+    @Column(name = "verification_window_started_at")
+    private OffsetDateTime verificationWindowStartedAt;
+    @Column(name = "verification_policy_migrated_at", nullable = false)
+    private OffsetDateTime verificationPolicyMigratedAt;
+
     @Column(name = "verified_at")
     private OffsetDateTime verifiedAt;
 
@@ -102,6 +107,8 @@ public class AccountJpaEntity {
         entity.setVerificationAttempts(account.getVerificationAttempts());
         entity.setVerificationResends(account.getVerificationResends());
         entity.setVerificationSentAt(toJdbc(account.getVerificationSentAt()));
+        entity.setVerificationWindowStartedAt(toJdbc(account.getVerificationWindowStartedAt()));
+        entity.setVerificationPolicyMigratedAt(toJdbc(account.getVerificationPolicyMigratedAt()));
         entity.setVerifiedAt(toJdbc(account.getVerifiedAt()));
         entity.setCreatedAt(toJdbc(account.getCreatedAt()));
         entity.setUpdatedAt(toJdbc(account.getUpdatedAt()));
@@ -112,7 +119,8 @@ public class AccountJpaEntity {
         return Account.restore(id, email, passwordHash, name, lastName, photoUrl, address, dni, phone,
                 role, status, verificationCode, toInstant(verificationExpiresAt), verificationAttempts,
                 verificationResends, toInstant(verificationSentAt), toInstant(verifiedAt),
-                toInstant(createdAt), toInstant(updatedAt));
+                toInstant(createdAt), toInstant(updatedAt),
+                toInstant(verificationWindowStartedAt), toInstant(verificationPolicyMigratedAt));
     }
 
     static OffsetDateTime toJdbc(Instant instant) {

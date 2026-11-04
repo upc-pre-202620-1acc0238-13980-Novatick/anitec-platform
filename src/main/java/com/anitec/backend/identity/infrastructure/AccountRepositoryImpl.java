@@ -25,7 +25,7 @@ public class AccountRepositoryImpl implements AccountRepository {
 
     @Override
     public Account save(Account account) {
-        return jpa.save(AccountJpaEntity.fromDomain(account)).toDomain();
+        return jpa.saveAndFlush(AccountJpaEntity.fromDomain(account)).toDomain();
     }
 
     @Override

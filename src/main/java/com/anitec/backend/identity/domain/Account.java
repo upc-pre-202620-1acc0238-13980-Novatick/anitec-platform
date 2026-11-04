@@ -37,6 +37,7 @@ public class Account {
     public static final int MAX_CODE_ATTEMPTS = 5;
     public static final int MAX_CODE_RESENDS = 5;
     public static final Duration RESEND_COOLDOWN = Duration.ofSeconds(60);
+    public static final Duration VERIFICATION_WINDOW = Duration.ofHours(24);
 
     private static final Pattern PASSWORD_POLICY = Pattern.compile(
             "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\\s]).{8,}$");
@@ -58,6 +59,8 @@ public class Account {
     private int verificationAttempts;
     private int verificationResends;
     private Instant verificationSentAt;
+    private Instant verificationWindowStartedAt;
+    private Instant verificationPolicyMigratedAt;
     private Instant verifiedAt;
     private Instant createdAt;
     private Instant updatedAt;
@@ -98,7 +101,8 @@ public class Account {
                                   String photoUrl, String address, String dni, String phone, Role role,
                                   Status status, String verificationCode, Instant verificationExpiresAt,
                                   int verificationAttempts, int verificationResends, Instant verificationSentAt,
-                                  Instant verifiedAt, Instant createdAt, Instant updatedAt) {
+                                  Instant verifiedAt, Instant createdAt, Instant updatedAt,
+                                  Instant verificationWindowStartedAt, Instant verificationPolicyMigratedAt) {
         Account account = new Account();
         account.id = id;
         account.email = email;
@@ -116,6 +120,8 @@ public class Account {
         account.verificationAttempts = verificationAttempts;
         account.verificationResends = verificationResends;
         account.verificationSentAt = verificationSentAt;
+        account.verificationWindowStartedAt = verificationWindowStartedAt;
+        account.verificationPolicyMigratedAt = verificationPolicyMigratedAt;
         account.verifiedAt = verifiedAt;
         account.createdAt = createdAt;
         account.updatedAt = updatedAt;
@@ -127,17 +133,22 @@ public class Account {
     /** Generates (or replaces) the 6 digit verification code applying the policy. */
     public String issueVerificationCode(Instant now) {
         requirePendingVerification();
-        if (verificationSentAt != null) {
-            if (now.isBefore(verificationSentAt.plus(RESEND_COOLDOWN))) {
-                throw DomainException.tooManyRequests("RESEND_COOLDOWN",
-                        "Espere 60 segundos antes de solicitar otro código de verificación");
-            }
-            if (verificationResends >= MAX_CODE_RESENDS) {
-                throw DomainException.tooManyRequests("RESEND_COOLDOWN",
-                        "Se alcanzó el límite de reenvíos de código; vuelva a intentarlo más tarde");
-            }
-            verificationResends++;
+        boolean freshWindow = verificationWindowStartedAt == null
+                || !now.isBefore(verificationWindowStartedAt.plus(VERIFICATION_WINDOW));
+        if (!freshWindow && verificationResends >= MAX_CODE_RESENDS) {
+            throw new VerificationThrottle("VERIFICATION_RESEND_LIMIT",
+                    "Se alcanzó el límite de reenvíos de esta ventana", nextVerificationResendAt(now));
         }
+        if (verificationSentAt != null && now.isBefore(verificationSentAt.plus(RESEND_COOLDOWN))) {
+            throw new VerificationThrottle("RESEND_COOLDOWN",
+                    "Espere 60 segundos entre emisiones", nextVerificationResendAt(now));
+        }
+        // Only an accepted new emission changes the window and resets the code's attempts.
+        if (freshWindow) {
+            verificationWindowStartedAt = now;
+            verificationResends = 0;
+        }
+        verificationResends++;
         String previous = verificationCode;
         do {
             verificationCode = randomCode();
@@ -147,6 +158,16 @@ public class Account {
         verificationSentAt = now;
         updatedAt = now;
         return verificationCode;
+    }
+
+    public Instant nextVerificationResendAt(Instant now) {
+        Instant next = verificationSentAt == null ? now : verificationSentAt.plus(RESEND_COOLDOWN);
+        if (verificationWindowStartedAt != null && verificationResends >= MAX_CODE_RESENDS
+                && now.isBefore(verificationWindowStartedAt.plus(VERIFICATION_WINDOW))) {
+            Instant end = verificationWindowStartedAt.plus(VERIFICATION_WINDOW);
+            if (end.isAfter(next)) next = end;
+        }
+        return next.isBefore(now) ? now : next;
     }
 
     /** Verifies the e-mail (US26). Sending a code never equals verifying it. */
@@ -221,6 +242,8 @@ public class Account {
         account.verificationCode = randomCode();
         account.verificationExpiresAt = now.plus(CODE_TTL);
         account.verificationSentAt = now;
+        account.verificationWindowStartedAt = now;
+        account.verificationPolicyMigratedAt = now;
     }
 
     private static String randomCode() {
