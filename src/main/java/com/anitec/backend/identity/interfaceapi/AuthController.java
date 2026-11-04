@@ -1,6 +1,13 @@
 package com.anitec.backend.identity.interfaceapi;
 
 import com.anitec.backend.identity.application.IdentityService;
+import com.anitec.backend.identity.domain.VerificationThrottle;
+import com.anitec.backend.shared.domain.DomainException;
+import com.anitec.backend.shared.domain.FieldError;
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import com.anitec.backend.shared.domain.Role;
 import com.anitec.backend.shared.interfaceapi.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,9 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final IdentityService identityService;
+    private final VerificationOriginLimiter verificationLimiter;
 
-    public AuthController(IdentityService identityService) {
+    public AuthController(IdentityService identityService, VerificationOriginLimiter verificationLimiter) {
         this.identityService = identityService;
+        this.verificationLimiter = verificationLimiter;
     }
 
     // ------------------------------------------------------------- requests
@@ -52,10 +61,11 @@ public class AuthController {
 
     public record VerifyRequest(
             @NotBlank @Email String email,
-            @NotBlank @Pattern(regexp = "[0-9]{6}", message = "debe tener 6 dígitos") String code) {
+            @NotBlank @Pattern(regexp = "[0-9]{6}", message = "debe tener 6 dígitos") String code,
+            @Size(max = 256) String password) {
     }
 
-    public record ResendCodeRequest(@NotBlank @Email String email) {
+    public record ResendCodeRequest(@NotBlank @Email String email, @Size(max = 256) String password) {
     }
 
     public record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {
@@ -82,17 +92,39 @@ public class AuthController {
 
     @PostMapping("/verify")
     @Operation(summary = "Verificar correo con el código de 6 dígitos (válido 10 minutos)")
-    public ResponseEntity<ApiResponse<Void>> verify(@Valid @RequestBody VerifyRequest request) {
-        identityService.verifyEmail(request.email(), request.code());
+    public ResponseEntity<?> verify(@Valid @RequestBody VerifyRequest request, HttpServletRequest http) {
+        try {
+            verificationLimiter.check(http.getRemoteAddr(), "verify");
+        } catch (VerificationThrottle limit) { return throttled(limit); }
+        boolean authorized = identityService.hasVerificationContext(request.email(), request.password());
+        try {
+            identityService.verifyEmail(request.email(), request.code());
+        } catch (DomainException failure) {
+            if (authorized) throw failure;
+            throw DomainException.business("INVALID_CODE", "No se pudo verificar el código");
+        }
         return ResponseEntity.ok(ApiResponse.ok("Correo verificado. Ya puede iniciar sesión."));
     }
 
     @PostMapping("/resend-code")
-    @Operation(summary = "Reenviar código de verificación (máx. 5 reenvíos, cada 60 s)")
-    public ResponseEntity<ApiResponse<IdentityService.EmailDelivery>> resendCode(
-            @Valid @RequestBody ResendCodeRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Solicitud de código procesada",
-                identityService.resendVerificationCode(request.email())));
+    @Operation(summary = "Reenvío autorizado por credenciales: cinco por ventana fija de 24 h, cada 60 s",
+            description = "Sin credenciales válidas devuelve 202 genérico sin emitir códigos ni revelar cuentas. La contraseña no crea una sesión.")
+    public ResponseEntity<?> resendCode(@Valid @RequestBody ResendCodeRequest request, HttpServletRequest http) {
+        try {
+            verificationLimiter.check(http.getRemoteAddr(), "resend");
+            if (!identityService.hasVerificationContext(request.email(), request.password())) {
+                return ResponseEntity.accepted().body(ApiResponse.ok("Solicitud recibida. Utilice el flujo de verificación autorizado."));
+            }
+            return ResponseEntity.accepted().body(ApiResponse.ok("Solicitud procesada; no garantiza entrega del correo",
+                    identityService.resendVerificationCode(request.email())));
+        } catch (VerificationThrottle limit) { return throttled(limit); }
+    }
+
+    private ResponseEntity<?> throttled(VerificationThrottle limit) {
+        long seconds = Math.max(1, (Duration.between(Instant.now(), limit.retryAt()).toMillis() + 999) / 1000);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", Long.toString(seconds))
+                .body(ApiResponse.error(limit.getMessage(), limit.errorCode(),
+                        List.of(new FieldError("retryAt", limit.retryAt().toString()))));
     }
 
     @PostMapping("/login")

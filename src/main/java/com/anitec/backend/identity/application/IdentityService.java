@@ -35,6 +35,7 @@ public class IdentityService {
     private final EmailSender emailSender;
     private final JwtService jwtService;
     private final DomainEventDispatcher events;
+    private final String unavailableCredentialHash;
 
     public IdentityService(AccountRepository accounts,
                            RefreshTokenRepository refreshTokens,
@@ -48,6 +49,7 @@ public class IdentityService {
         this.emailSender = emailSender;
         this.jwtService = jwtService;
         this.events = events;
+        this.unavailableCredentialHash = passwordEncoder.encode("unavailable-verification-context");
     }
 
     // ----------------------------------------------------------- commands
@@ -112,7 +114,21 @@ public class IdentityService {
         events.publish(new Account.EmailVerified(account.getId()));
     }
 
-    public record EmailDelivery(String email, String emailDelivery) {
+    public record EmailDelivery(String email, String emailDelivery, int remainingResends, Instant nextResendAt) {
+    }
+
+    /** Proof of credentials for this operation only: never grants an application session. */
+    @Transactional(readOnly = true)
+    public boolean hasVerificationContext(String email, String password) {
+        if (password == null || password.isBlank()) return false;
+        var found = accounts.findByEmail(Account.normalizeEmail(email));
+        try {
+            boolean matches = passwordEncoder.matches(password,
+                    found.map(Account::getPasswordHash).orElse(unavailableCredentialHash));
+            return found.isPresent() && matches;
+        } catch (IllegalArgumentException invalidCredential) {
+            return false;
+        }
     }
 
     @Transactional
@@ -120,16 +136,17 @@ public class IdentityService {
         var found = accounts.findByEmailForUpdate(Account.normalizeEmail(email));
         if (found.isEmpty()) {
             // Do not reveal whether the account exists (US26 does not cover it).
-            return new EmailDelivery(email, "UNCONFIRMED");
+            throw DomainException.conflict("VERIFICATION_NOT_PENDING", "No hay una verificación pendiente disponible");
         }
         Account account = found.get();
         if (account.getStatus() != Account.Status.PENDIENTE) {
-            return new EmailDelivery(account.getEmail(), "UNCONFIRMED");
+            throw DomainException.conflict("VERIFICATION_NOT_PENDING", "No hay una verificación pendiente disponible");
         }
         account.issueVerificationCode(Instant.now());
         accounts.save(account);
         boolean sent = sendVerificationEmail(account);
-        return new EmailDelivery(account.getEmail(), sent ? "SENT" : "UNCONFIRMED");
+        return new EmailDelivery(account.getEmail(), sent ? "SENT" : "UNCONFIRMED",
+                Account.MAX_CODE_RESENDS - account.getVerificationResends(), account.nextVerificationResendAt(Instant.now()));
     }
 
     @Transactional
@@ -207,7 +224,7 @@ public class IdentityService {
         try {
             return emailSender.send(account.getEmail(), "ANITEC - Código de verificación", body);
         } catch (Exception ex) {
-            log.warn("Verification e-mail could not be sent to {}: {}", account.getEmail(), ex.getMessage());
+            log.warn("Verification e-mail delivery could not be confirmed");
             return false;
         }
     }
