@@ -8,6 +8,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
@@ -15,8 +17,7 @@ import java.util.Map;
 
 /**
  * EmailSender adapter: uses the Resend HTTP API when {@code resend.api-key}
- * is configured; otherwise falls back to a console logger (dev/test) so the
- * application always boots (decision #6).
+ * is configured. Otherwise reports UNCONFIRMED without logging recipient or body.
  */
 @Component
 public class ResendEmailSender implements EmailSender {
@@ -25,20 +26,26 @@ public class ResendEmailSender implements EmailSender {
 
     private final String apiKey;
     private final String from;
+    private final boolean production;
 
     public ResendEmailSender(
             @Value("${resend.api-key:}") String apiKey,
-            @Value("${resend.from:}") String from) {
+            @Value("${resend.from:}") String from,
+            Environment environment) {
         this.apiKey = apiKey;
         this.from = from;
+        this.production = environment.acceptsProfiles(Profiles.of("prod"));
     }
 
     @Override
     public boolean send(String to, String subject, String body) {
         if (apiKey == null || apiKey.isBlank()) {
-            log.info("[EMAIL CONSOLE FALLBACK] to={} | subject={} | {}", to, subject,
-                    body.replace('\n', ' '));
-            return true;
+            if (production) {
+                log.warn("Email not sent: provider is not configured in production");
+            } else {
+                log.info("Email not sent: provider is not configured in this development/test environment");
+            }
+            return false;
         }
         try {
             RestClient client = RestClient.builder()
@@ -59,10 +66,10 @@ public class ResendEmailSender implements EmailSender {
             if (response.getStatusCode().is2xxSuccessful()) {
                 return true;
             }
-            log.warn("Resend rejected the message to {} (HTTP {})", to, response.getStatusCode().value());
+            log.warn("Resend rejected an email (HTTP {})", response.getStatusCode().value());
             return false;
         } catch (Exception ex) {
-            log.warn("Resend call failed for {}: {}", to, ex.getMessage());
+            log.warn("Resend email request failed ({})", ex.getClass().getSimpleName());
             return false;
         }
     }

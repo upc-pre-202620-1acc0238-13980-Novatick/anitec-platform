@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -72,7 +71,7 @@ public class IdentityService {
 
     @Transactional
     public RegisterResult register(RegisterCommand command) {
-        if (command.role() == null || command.role() == Role.ADMIN) {
+        if (command.role() == null) {
             throw DomainException.badRequest("VALIDATION_ERROR", "role: solo GANADERO o VETERINARIO pueden registrarse");
         }
         Account.requirePasswordCompliance(command.password());
@@ -134,7 +133,7 @@ public class IdentityService {
             throw DomainException.unauthorized("INVALID_CREDENTIALS", "Correo o contraseña incorrectos");
         }
         if (account.getStatus() == Account.Status.SUSPENDIDA) {
-            throw DomainException.unauthorized("ACCOUNT_SUSPENDED", "La cuenta está suspendida; contacte al administrador");
+            throw DomainException.unauthorized("ACCOUNT_SUSPENDED", "La cuenta está suspendida");
         }
         if (!account.canSignIn()) {
             throw DomainException.unauthorized("EMAIL_NOT_VERIFIED", "Debe verificar su correo electrónico antes de iniciar sesión");
@@ -174,18 +173,6 @@ public class IdentityService {
         Account account = requireAccount(accountId);
         account.updateProfile(update.name(), update.lastName(), update.photoUrl(),
                 update.address(), update.dni(), update.phone(), Instant.now());
-        return accounts.save(account);
-    }
-
-    /** Public API used by the Admin context (context map section 5.2). */
-    @Transactional
-    public Account changeUserStatus(UUID accountId, Account.Status status) {
-        Account account = requireAccount(accountId);
-        if (status == Account.Status.SUSPENDIDA) {
-            account.suspend(Instant.now());
-        } else {
-            account.activate(Instant.now());
-        }
         return accounts.save(account);
     }
 

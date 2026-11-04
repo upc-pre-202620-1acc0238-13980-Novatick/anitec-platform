@@ -34,15 +34,6 @@ public class SpeciesJpaEntity {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
-    public static SpeciesJpaEntity fromDomain(Species value) {
-        SpeciesJpaEntity entity = new SpeciesJpaEntity();
-        entity.setId(value.getId());
-        entity.setName(value.getName());
-        entity.setDescription(value.getDescription());
-        entity.setPhotoUrl(value.getPhotoUrl());
-        entity.setCreatedAt(JpaTimes.toJdbc(value.getCreatedAt()));
-        return entity;
-    }
 
     public Species toDomain() {
         return Species.restore(id, name, description, photoUrl, JpaTimes.toInstant(createdAt));

@@ -17,8 +17,10 @@ spring:
   flyway:
     enabled: true
     placeholders:
-      admin_email: ${ADMIN_SEED_EMAIL:admin@anitec.pe}
-      admin_password_hash: ${ADMIN_SEED_PASSWORD_HASH:}
+      # Required only to parse immutable V9. The inert row is removed by V11
+      # before the application starts; no administrative credentials are configured.
+      admin_email: retired-admin@bootstrap.invalid
+      admin_password_hash: DISABLED-HISTORICAL-BOOTSTRAP
       demo_seed: ${DEMO_SEED:true}
 
 server:
@@ -48,6 +50,10 @@ resend:
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+
+# Simulation additionally requires the dev or test profile; prod always refuses it.
+payments:
+  simulation-enabled: ${PAYMENTS_SIMULATION_ENABLED:false}
 
 springdoc:
   swagger-ui:

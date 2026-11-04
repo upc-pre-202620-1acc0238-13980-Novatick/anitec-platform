@@ -18,10 +18,6 @@ public class SpeciesRepositoryImpl implements SpeciesRepository {
         this.jpa = jpa;
     }
 
-    @Override
-    public Species save(Species species) {
-        return jpa.save(SpeciesJpaEntity.fromDomain(species)).toDomain();
-    }
 
     @Override
     public Optional<Species> findById(UUID speciesId) {
@@ -33,8 +29,4 @@ public class SpeciesRepositoryImpl implements SpeciesRepository {
         return jpa.findAll(SortHelper.byCreatedAt()).stream().map(SpeciesJpaEntity::toDomain).toList();
     }
 
-    @Override
-    public void delete(UUID speciesId) {
-        jpa.deleteById(speciesId);
-    }
 }

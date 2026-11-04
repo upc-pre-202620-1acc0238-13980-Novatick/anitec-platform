@@ -58,10 +58,6 @@ public class AnimalRepositoryImpl implements AnimalRepository {
         return jpa.count(searchSpec(ownerScope, null, null, Animal.Status.ACTIVO, null));
     }
 
-    @Override
-    public long countBySpeciesId(UUID speciesId) {
-        return jpa.countBySpeciesId(speciesId);
-    }
 
     @Override
     public long countByFarmId(UUID farmId) {

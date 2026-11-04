@@ -1,5 +1,7 @@
 package com.anitec.backend.subscriptions.domain;
 
+import com.anitec.backend.shared.domain.DomainException;
+
 import java.util.UUID;
 
 /**
@@ -8,6 +10,11 @@ import java.util.UUID;
  * mode + webhook) can be plugged here later behind the same interface.
  */
 public interface PaymentGateway {
+
+    /** Client-supplied payment outcomes are accepted only by explicit test/dev simulators. */
+    default void requireSimulatedConfirmation() {
+        throw DomainException.unavailable("PAYMENTS_UNAVAILABLE", "Los pagos no están disponibles en este entorno");
+    }
 
     /** Creates a checkout reference for the given account/plan. */
     String createCheckout(UUID accountId, Plan plan);

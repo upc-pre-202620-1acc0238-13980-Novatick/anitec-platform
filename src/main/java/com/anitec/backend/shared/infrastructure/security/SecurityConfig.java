@@ -50,7 +50,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**", "/actuator/health", "/actuator/info",
                                 "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/admin", "/api/v1/admin/**").denyAll()
                         // GANADERO write operations
                         .requestMatchers(HttpMethod.POST, "/api/v1/farms/**").hasRole("GANADERO")
                         .requestMatchers(HttpMethod.POST, "/api/v1/animals").hasRole("GANADERO")

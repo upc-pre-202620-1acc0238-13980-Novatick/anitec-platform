@@ -52,19 +52,6 @@ public class PlanJpaEntity {
     @Column(nullable = false)
     private boolean active;
 
-    public static PlanJpaEntity fromDomain(Plan plan) {
-        PlanJpaEntity entity = new PlanJpaEntity();
-        entity.setId(plan.getId());
-        entity.setName(plan.getName());
-        entity.setProfile(plan.getProfile());
-        entity.setType(plan.getType());
-        entity.setPrice(plan.getPrice());
-        entity.setCurrency(plan.getCurrency());
-        entity.setBillingPeriod(plan.getBillingPeriod());
-        entity.setCapacityLimit(plan.getCapacityLimit());
-        entity.setActive(plan.isActive());
-        return entity;
-    }
 
     public Plan toDomain() {
         return Plan.restore(id, name, profile, type, price, currency, billingPeriod, capacityLimit, active);

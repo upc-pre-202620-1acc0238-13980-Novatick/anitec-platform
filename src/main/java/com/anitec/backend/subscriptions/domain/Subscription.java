@@ -24,7 +24,7 @@ public class Subscription {
             implements DomainEvent {
     }
 
-    /** Free-plan grant / admin limit edit: capacity only, no "premium" wording. */
+    /** Free-plan grant: capacity only, no "premium" wording. */
     public record SubscriptionLimitChanged(UUID accountId, Role profile, int limit, long revision)
             implements DomainEvent {
     }
@@ -122,13 +122,6 @@ public class Subscription {
     public void extendPeriod(Instant now) {
         this.endsAt = now.atOffset(java.time.ZoneOffset.UTC).toLocalDateTime()
                 .plusMonths(1).atZone(java.time.ZoneId.of("UTC")).toInstant();
-        this.updatedAt = now;
-    }
-
-    /** Applies a plan capacity change with a fresh revision (admin plan edit). */
-    public void applyCapacity(int newLimit, Instant now) {
-        this.allowedCapacity = newLimit;
-        this.revision++;
         this.updatedAt = now;
     }
 

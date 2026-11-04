@@ -10,10 +10,8 @@
 -- ejecutar tantas veces como haga falta sin duplicar filas ni tocar datos
 -- existentes. No modifica V9 ni su checksum en flyway_schema_history.
 --
--- El usuario admin NO está aquí: lo siembra siempre la migración V9.
 --
 -- -----------------------------------------------------------------------------
--- CUENTAS (todas con contraseña "Anitec!Demo123", salvo el admin de V9):
 --
 --   demo.ganadero@anitec.pe      GANADERO     ACTIVA      Plan gratuito (8/15 animales)
 --   demo.veterinario@anitec.pe   VETERINARIO  ACTIVA      Plan gratuito (2/3 vínculos)
@@ -27,7 +25,6 @@
 -- (1 REVOCADA) · 8 citas (4 futuras PROGRAMADA, 1 futura CANCELADA, 2 pasadas
 -- COMPLETADA + 1 pasada CANCELADA) · 6 historias clínicas con tratamientos, vacunas
 -- e instrucciones versionadas (2 versiones) · 3 pagos (2 APPROVED + 1 DECLINED) ·
--- 11 notificaciones · 7 entradas de auditoría de admin.
 --
 -- Los contadores de capacidad (animales activos / vínculos activos) se recalculan
 -- al final del script para que siempre coincidan con las filas reales.
@@ -111,7 +108,6 @@ BEGIN
          'GANADERO', 'ACTIVA', v_now - INTERVAL '40 days', v_now - INTERVAL '40 days', v_now - INTERVAL '40 days')
     ON CONFLICT (email) DO NOTHING;
 
-    -- Cuenta suspendida (para demostrar el bloqueo de login y el panel de admin)
     INSERT INTO identity_accounts
         (id, email, password_hash, name, last_name, phone, dni, address, role, status, verified_at, created_at, updated_at)
     VALUES
@@ -508,25 +504,6 @@ BEGIN
          TRUE, v_now - INTERVAL '8 days')
     ON CONFLICT (id) DO NOTHING;
 
-    -- ================================================= 12. auditoría de admin
-    -- (acciones idénticas a las que registra AdminService)
-    INSERT INTO admin_audit_log (id, actor_id, action, entity_type, entity_id, details, created_at)
-    VALUES
-        ('70000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-0000000000ff',
-         'USER_STATUS_CHANGED', 'Account', v_suspended, 'status=SUSPENDIDA', v_now - INTERVAL '3 days'),
-        ('70000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-0000000000ff',
-         'USER_STATUS_CHANGED', 'Account', v_vet2, 'status=ACTIVA', v_now - INTERVAL '7 days'),
-        ('70000000-0000-4000-8000-000000000003', 'd0000000-0000-4000-8000-0000000000ff',
-         'SPECIES_CREATED', 'Species', v_equino, 'name=Equino', v_now - INTERVAL '10 days'),
-        ('70000000-0000-4000-8000-000000000004', 'd0000000-0000-4000-8000-0000000000ff',
-         'SPECIES_CREATED', 'Species', v_porcino, 'name=Porcino', v_now - INTERVAL '10 days'),
-        ('70000000-0000-4000-8000-000000000005', 'd0000000-0000-4000-8000-0000000000ff',
-         'SPECIES_UPDATED', 'Species', v_bovino, 'name=Bovino', v_now - INTERVAL '8 days'),
-        ('70000000-0000-4000-8000-000000000006', 'd0000000-0000-4000-8000-0000000000ff',
-         'PLAN_UPDATED', 'Plan', v_prem_farmer, 'capacity=150', v_now - INTERVAL '7 days'),
-        ('70000000-0000-4000-8000-000000000007', 'd0000000-0000-4000-8000-0000000000ff',
-         'PLAN_UPDATED', 'Plan', v_prem_vet, 'capacity=25', v_now - INTERVAL '7 days')
-    ON CONFLICT (id) DO NOTHING;
 END $$;
 
 -- ============================================== 13. recálculo de contadores

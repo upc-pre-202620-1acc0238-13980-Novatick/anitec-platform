@@ -1,6 +1,5 @@
 package com.anitec.backend.subscriptions.domain;
 
-import com.anitec.backend.shared.domain.DomainException;
 import com.anitec.backend.shared.domain.Role;
 import lombok.Getter;
 
@@ -42,39 +41,9 @@ public class Plan {
         this.active = active;
     }
 
-    public static Plan create(String name, Role profile, PlanType type, BigDecimal price,
-                              String currency, String billingPeriod, int capacityLimit, boolean active) {
-        if (profile != Role.GANADERO && profile != Role.VETERINARIO) {
-            throw DomainException.badRequest("VALIDATION_ERROR", "profile: solo GANADERO o VETERINARIO");
-        }
-        if (capacityLimit < 0) {
-            throw DomainException.badRequest("VALIDATION_ERROR", "capacityLimit: no puede ser negativo");
-        }
-        return new Plan(UUID.randomUUID(), name, profile, type, price, currency, billingPeriod,
-                capacityLimit, active);
-    }
-
     public static Plan restore(UUID id, String name, Role profile, PlanType type, BigDecimal price,
                                String currency, String billingPeriod, int capacityLimit, boolean active) {
         return new Plan(id, name, profile, type, price, currency, billingPeriod, capacityLimit, active);
-    }
-
-    public void update(String name, BigDecimal price, Integer capacityLimit, Boolean active) {
-        if (name != null && !name.isBlank()) {
-            this.name = name.trim();
-        }
-        if (price != null) {
-            this.price = price;
-        }
-        if (capacityLimit != null) {
-            if (capacityLimit < 0) {
-                throw DomainException.badRequest("VALIDATION_ERROR", "capacityLimit: no puede ser negativo");
-            }
-            this.capacityLimit = capacityLimit;
-        }
-        if (active != null) {
-            this.active = active;
-        }
     }
 
     public boolean supports(Role requestedProfile) {

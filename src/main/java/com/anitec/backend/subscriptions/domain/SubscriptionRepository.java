@@ -16,5 +16,4 @@ public interface SubscriptionRepository {
 
     List<Subscription> findDue(Instant now);
 
-    List<Subscription> findByPlanId(UUID planId);
 }

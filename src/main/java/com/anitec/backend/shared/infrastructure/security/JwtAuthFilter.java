@@ -15,6 +15,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
+import com.anitec.backend.identity.domain.AccountRepository;
+import com.anitec.backend.shared.domain.Role;
 
 /**
  * Extracts {@code Authorization: Bearer <jwt>}, validates the signature and
@@ -26,9 +28,11 @@ import java.util.UUID;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final AccountRepository accounts;
 
-    public JwtAuthFilter(JwtService jwtService) {
+    public JwtAuthFilter(JwtService jwtService, AccountRepository accounts) {
         this.jwtService = jwtService;
+        this.accounts = accounts;
     }
 
     @Override
@@ -43,11 +47,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 Claims claims = jwtService.parse(token);
                 UUID accountId = UUID.fromString(claims.getSubject());
-                String role = claims.get("role", String.class);
+                Role role = Role.valueOf(claims.get("role", String.class));
+                var account = accounts.findById(accountId).orElseThrow();
+                if (!account.canSignIn() || account.getRole() != role) {
+                    throw new IllegalArgumentException("Account is not authorized for this token");
+                }
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         accountId.toString(), null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+                        List.of(new SimpleGrantedAuthority("ROLE_" + role.name())));
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (Exception ignored) {

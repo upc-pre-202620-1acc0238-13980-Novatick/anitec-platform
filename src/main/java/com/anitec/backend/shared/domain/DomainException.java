@@ -71,4 +71,8 @@ public class DomainException extends RuntimeException {
     public static DomainException internal(String message) {
         return new DomainException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", message, null);
     }
+
+    public static DomainException unavailable(String errorCode, String message) {
+        return new DomainException(HttpStatus.SERVICE_UNAVAILABLE, errorCode, message, null);
+    }
 }

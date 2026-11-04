@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -34,7 +35,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * real PostgreSQL provided by Testcontainers (Docker required).
  */
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles({"dev", "test"})
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {"payments.simulation-enabled=true", "resend.api-key="})
 class SmokeTests {
 
     @Container
@@ -59,6 +62,68 @@ class SmokeTests {
     SubscriptionService subscriptionService;
 
     private final HttpClient http = HttpClient.newHttpClient();
+
+    @Autowired
+    org.springframework.context.ApplicationContext applicationContext;
+
+    @org.springframework.beans.factory.annotation.Value("${jwt.secret}")
+    String signingSecret;
+
+    private String tokenWithRole(UUID accountId, String role) {
+        return io.jsonwebtoken.Jwts.builder().subject(accountId.toString()).claim("role", role)
+                .expiration(java.util.Date.from(java.time.Instant.now().plusSeconds(300)))
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                        signingSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8))).compact();
+    }
+
+    @Test
+    void onlyProductRolesAndCurrentActiveAccountsAreAuthenticated() {
+        assertThat(com.anitec.backend.shared.domain.Role.values()).extracting(Enum::name)
+                .containsExactly("GANADERO", "VETERINARIO");
+        Seeded farmer = seed("GANADERO", "roles");
+        UUID id = accountRepository.findByEmail(farmer.email()).orElseThrow().getId();
+        for (String role : List.of("ADMIN", "UNKNOWN", "VETERINARIO", "")) {
+            assertThat(get("/api/v1/account/me", tokenWithRole(id, role)).status()).isEqualTo(401);
+        }
+        assertThat(register(uniqueEmail("forbidden"), "ADMIN").status()).isEqualTo(400);
+        jdbcTemplate.update("UPDATE identity_accounts SET status='SUSPENDIDA' WHERE id=?", id);
+        assertThat(get("/api/v1/account/me", farmer.token()).status()).isEqualTo(401);
+        jdbcTemplate.update("UPDATE identity_accounts SET status='ACTIVA', verified_at=NULL WHERE id=?", id);
+        assertThat(get("/api/v1/account/me", farmer.token()).status()).isEqualTo(401);
+        jdbcTemplate.update("DELETE FROM identity_accounts WHERE id=?", id);
+        assertThat(get("/api/v1/account/me", farmer.token()).status()).isEqualTo(401);
+    }
+
+    @Test
+    void retiredAdministrativeMappingsAndRoutesCannotBeUsed() {
+        var mappings = applicationContext.getBean("requestMappingHandlerMapping",
+                org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping.class);
+        assertThat(mappings.getHandlerMethods().keySet()).allSatisfy(mapping ->
+                assertThat(mapping.getPatternValues()).noneMatch(path -> path.startsWith("/api/v1/admin")));
+        Seeded farmer = seed("GANADERO", "noroutesf");
+        Seeded vet = seed("VETERINARIO", "noroutesv");
+        UUID id = accountRepository.findByEmail(farmer.email()).orElseThrow().getId();
+        String retiredToken = tokenWithRole(id, "ADMIN");
+        String[] routes = {"GET /users", "PATCH /users/" + id + "/status", "POST /species",
+                "PUT /species/" + id, "DELETE /species/" + id, "GET /plans", "POST /plans",
+                "PUT /plans/" + id, "GET /audit-log"};
+        for (String route : routes) {
+            String[] parts = route.split(" ", 2);
+            String path = "/api/v1/admin" + parts[1];
+            assertThat(call(parts[0], path, null, farmer.token()).status()).isEqualTo(403);
+            assertThat(call(parts[0], path, null, vet.token()).status()).isEqualTo(403);
+            assertThat(call(parts[0], path, null, retiredToken).status()).isEqualTo(401);
+            assertThat(call(parts[0], path, null, null).status()).isEqualTo(401);
+        }
+    }
+
+    @Test
+    void registrationWithoutProviderDoesNotClaimTheCodeWasSent() {
+        Res result = register(uniqueEmail("unconfirmed"), "GANADERO");
+        assertThat(result.status()).isEqualTo(201);
+        assertThat(result.data().path("emailDelivery").asText()).isEqualTo("UNCONFIRMED");
+        assertThat(result.body().path("message").asText()).doesNotContain("código enviado");
+    }
 
     // ------------------------------------------------------------- helpers
 
@@ -168,7 +233,7 @@ class SmokeTests {
     String linkPair(String farmerEmail, String farmerToken, String vetEmail, String vetToken) {
         Res invitation = post("/api/v1/invitations", Map.of("vetEmail", vetEmail), farmerToken);
         assertThat(invitation.status()).isEqualTo(201);
-        assertThat(invitation.data().path("emailDelivery").asText()).isEqualTo("SENT");
+        assertThat(invitation.data().path("emailDelivery").asText()).isEqualTo("UNCONFIRMED");
         String invitationId = invitation.data().path("invitationId").asText();
 
         Res pending = get("/api/v1/invitations/pending", vetToken);
@@ -191,7 +256,7 @@ class SmokeTests {
         String email = uniqueEmail("auth");
         Res created = register(email, "GANADERO");
         assertThat(created.status()).isEqualTo(201);
-        assertThat(created.data().path("emailDelivery").asText()).isEqualTo("SENT");
+        assertThat(created.data().path("emailDelivery").asText()).isEqualTo("UNCONFIRMED");
         String verificationCode = codeOf(email);
 
         // weak password rejected with the standard envelope (400)
@@ -362,7 +427,7 @@ class SmokeTests {
         // invite + duplicate protection
         Res invitation = post("/api/v1/invitations", Map.of("vetEmail", vet.email()), farmer.token());
         assertThat(invitation.status()).isEqualTo(201);
-        assertThat(invitation.data().path("emailDelivery").asText()).isEqualTo("SENT");
+        assertThat(invitation.data().path("emailDelivery").asText()).isEqualTo("UNCONFIRMED");
         String invitationId = invitation.data().path("invitationId").asText();
         Res duplicated = post("/api/v1/invitations", Map.of("vetEmail", vet.email()), farmer.token());
         assertThat(duplicated.status()).isEqualTo(409);

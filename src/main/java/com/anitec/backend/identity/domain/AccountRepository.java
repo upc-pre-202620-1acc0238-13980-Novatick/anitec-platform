@@ -1,6 +1,5 @@
 package com.anitec.backend.identity.domain;
 
-import com.anitec.backend.shared.domain.Role;
 
 import java.util.Collection;
 import java.util.List;
@@ -25,8 +24,5 @@ public interface AccountRepository {
     /** Batch lookup used to resolve display names in other contexts. */
     List<Account> findByIds(Collection<UUID> accountIds);
 
-    /** Admin search (spec endpoint #52): query over e-mail/name, optional role filter. */
-    List<Account> search(String query, Role role, int offset, int limit);
 
-    long countSearch(String query, Role role);
 }

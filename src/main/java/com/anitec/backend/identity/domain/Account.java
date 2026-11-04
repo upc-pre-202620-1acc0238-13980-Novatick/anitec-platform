@@ -6,7 +6,6 @@ import com.anitec.backend.shared.domain.Role;
 import lombok.Getter;
 
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
@@ -197,19 +196,6 @@ public class Account {
         this.address = address;
         this.dni = dni;
         this.phone = phone;
-        this.updatedAt = now;
-    }
-
-    public void suspend(Instant now) {
-        if (role == Role.ADMIN) {
-            throw DomainException.forbidden("No se puede suspender una cuenta de administrador");
-        }
-        this.status = Status.SUSPENDIDA;
-        this.updatedAt = now;
-    }
-
-    public void activate(Instant now) {
-        this.status = Status.ACTIVA;
         this.updatedAt = now;
     }
 
