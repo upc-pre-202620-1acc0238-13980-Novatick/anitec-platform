@@ -93,7 +93,7 @@ public class CareService {
     @Transactional
     public VeterinaryAppointment changeVisitStatus(UUID veterinarianId, UUID appointmentId,
                                                    VeterinaryAppointment.Status newStatus) {
-        VeterinaryAppointment appointment = appointments.findById(appointmentId)
+        VeterinaryAppointment appointment = appointments.findByIdForUpdate(appointmentId)
                 .orElseThrow(() -> DomainException.notFound("Cita no encontrada"));
         if (!appointment.isAssignedTo(veterinarianId)) {
             throw DomainException.forbidden("Solo el veterinario asignado puede modificar esta cita");
@@ -120,7 +120,7 @@ public class CareService {
 
         VeterinaryAppointment visit = null;
         if (visitId != null) {
-            visit = appointments.findById(visitId)
+            visit = appointments.findByIdForUpdate(visitId)
                     .orElseThrow(() -> DomainException.notFound("Cita no encontrada"));
             if (!visit.getAnimalId().equals(animal.getId())) {
                 throw DomainException.badRequest("VALIDATION_ERROR",
@@ -128,6 +128,14 @@ public class CareService {
             }
             if (!visit.isAssignedTo(veterinarianId)) {
                 throw DomainException.forbidden("Solo el veterinario asignado puede registrar esta atención");
+            }
+            if (records.existsByAppointmentId(visitId)) {
+                throw DomainException.conflict("ATTENTION_ALREADY_EXISTS",
+                        "La cita ya tiene una atención clínica registrada");
+            }
+            if (visit.getStatus() != VeterinaryAppointment.Status.PROGRAMADA) {
+                throw DomainException.conflict("INVALID_STATE_TRANSITION",
+                        "Solo una cita programada permite registrar su atención clínica");
             }
         }
 

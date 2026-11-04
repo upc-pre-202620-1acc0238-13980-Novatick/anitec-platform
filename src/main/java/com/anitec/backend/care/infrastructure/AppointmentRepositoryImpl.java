@@ -32,6 +32,11 @@ public class AppointmentRepositoryImpl implements AppointmentRepository {
     }
 
     @Override
+    public Optional<VeterinaryAppointment> findByIdForUpdate(UUID appointmentId) {
+        return jpa.findByIdForUpdate(appointmentId).map(AppointmentJpaEntity::toDomain);
+    }
+
+    @Override
     public List<VeterinaryAppointment> findByVeterinarianAndRange(UUID veterinarianId, Instant from, Instant to) {
         return jpa.findByVeterinarianIdAndScheduledAtBetweenOrderByScheduledAtAsc(veterinarianId,
                         OffsetDateTime.ofInstant(from, ZoneOffset.UTC),

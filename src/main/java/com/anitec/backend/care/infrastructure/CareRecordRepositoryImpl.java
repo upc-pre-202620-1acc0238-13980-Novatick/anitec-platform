@@ -3,6 +3,9 @@ package com.anitec.backend.care.infrastructure;
 import com.anitec.backend.care.domain.CareRecord;
 import com.anitec.backend.care.domain.CareRecordRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.hibernate.exception.ConstraintViolationException;
+import com.anitec.backend.shared.domain.DomainException;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,7 +23,19 @@ public class CareRecordRepositoryImpl implements CareRecordRepository {
 
     @Override
     public CareRecord save(CareRecord record) {
-        return jpa.save(CareRecordJpaEntity.fromDomain(record)).toDomain();
+        try {
+            // Flush here so this exact constraint can be translated before transaction commit.
+            return jpa.saveAndFlush(CareRecordJpaEntity.fromDomain(record)).toDomain();
+        } catch (DataIntegrityViolationException failure) {
+            for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+                if (cause instanceof ConstraintViolationException violation
+                        && "uq_care_records_appointment".equals(violation.getConstraintName())) {
+                    throw DomainException.conflict("ATTENTION_ALREADY_EXISTS",
+                            "La cita ya tiene una atención clínica registrada");
+                }
+            }
+            throw failure;
+        }
     }
 
     @Override
