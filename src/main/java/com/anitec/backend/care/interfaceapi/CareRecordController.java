@@ -55,7 +55,8 @@ public class CareRecordController {
             UUID visitId,
             @NotBlank(message = "obligatorio")
             @Size(max = 150, message = "máximo 150 caracteres") String title,
-            String description,
+            @NotBlank(message = "obligatorio") String description,
+            @NotNull(message = "obligatorio")
             @PastOrPresent(message = "no puede ser futura") LocalDate attentionDate,
             List<@Valid TreatmentInput> treatments,
             List<@Valid VaccinationInput> vaccinations,

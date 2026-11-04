@@ -522,10 +522,12 @@ class SmokeTests {
 
         // only the vet profile may register attentions (route rule)
         assertThat(post("/api/v1/attentions", Map.of(
-                "animalId", animalId, "title", "X"), farmer.token()).status()).isEqualTo(403);
+                "animalId", animalId, "title", "X", "description", "Evaluación",
+                "attentionDate", LocalDate.now().minusDays(1).toString()), farmer.token()).status()).isEqualTo(403);
         // ... and only linked vets (application rule, US09)
         Res strangerAttention = post("/api/v1/attentions", Map.of(
-                "animalId", animalId, "title", "Intruso"), strangerVet.token());
+                "animalId", animalId, "title", "Intruso", "description", "Evaluación",
+                "attentionDate", LocalDate.now().minusDays(1).toString()), strangerVet.token());
         assertThat(strangerAttention.status()).isEqualTo(403);
 
         String yesterday = LocalDate.now().minusDays(1).toString();
@@ -797,6 +799,8 @@ class SmokeTests {
         Res attention = post("/api/v1/attentions", Map.of(
                 "animalId", animalId,
                 "title", "Control",
+                "description", "Evaluación clínica",
+                "attentionDate", LocalDate.now().minusDays(1).toString(),
                 "treatments", List.of(Map.of("description", "Vitamina B12"))), vet.token());
         assertThat(attention.status()).isEqualTo(400);
         assertThat(attention.errorCode()).isEqualTo("VALIDATION_ERROR");

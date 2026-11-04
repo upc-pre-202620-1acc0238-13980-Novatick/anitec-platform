@@ -135,6 +135,10 @@ public class CareRecord {
     public static CareRecord register(UUID animalId, UUID ownerId, UUID veterinarianId, UUID appointmentId,
                                       String title, String description, LocalDate attentionDate, Instant now) {
         requireNonBlank(title, "title");
+        requireNonBlank(description, "description");
+        if (attentionDate == null) {
+            throw DomainException.badRequest("VALIDATION_ERROR", "attentionDate: es obligatorio");
+        }
         requireNotFuture(attentionDate, "attentionDate");
         CareRecord record = new CareRecord();
         record.id = UUID.randomUUID();
@@ -144,8 +148,7 @@ public class CareRecord {
         record.appointmentId = appointmentId;
         record.title = title.trim();
         record.description = description;
-        record.attentionDate = attentionDate == null
-                ? LocalDate.now(ZoneOffset.UTC) : attentionDate;
+        record.attentionDate = attentionDate;
         record.registeredAt = now;
         return record;
     }

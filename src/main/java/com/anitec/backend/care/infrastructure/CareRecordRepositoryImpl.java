@@ -29,6 +29,11 @@ public class CareRecordRepositoryImpl implements CareRecordRepository {
     }
 
     @Override
+    public boolean existsByAppointmentId(UUID appointmentId) {
+        return jpa.existsByAppointmentId(appointmentId);
+    }
+
+    @Override
     public List<CareRecord> findByAnimalIdOrderByAttentionDateDesc(UUID animalId) {
         return jpa.findByAnimalIdOrderByAttentionDateDesc(animalId).stream()
                 .map(CareRecordJpaEntity::toDomain).toList();
