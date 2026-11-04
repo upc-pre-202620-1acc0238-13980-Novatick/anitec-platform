@@ -44,7 +44,7 @@ class RemoveAdminMigrationTests {
         assertThat(jdbc.queryForObject("SELECT to_regclass('public.admin_audit_log')", String.class)).isNull();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM livestock_species", Integer.class)).isEqualTo(5);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM subscriptions_plans", Integer.class)).isEqualTo(4);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class)).isEqualTo(12);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class)).isEqualTo(13);
         assertThatThrownBy(() -> jdbc.update("""
                 INSERT INTO identity_accounts(email,password_hash,name,last_name,role)
                 VALUES ('forbidden@example.invalid','disabled','Test','Probe','ADMIN')
@@ -86,8 +86,8 @@ class RemoveAdminMigrationTests {
         jdbc.update("INSERT INTO care_appointments(animal_id,owner_id,veterinarian_id,type,scheduled_at,origin_attention_id) VALUES (?,?,?,'CONTROL',now()+interval '2 days',?)", animal, farmer, vet, record);
         UUID subscription = jdbc.queryForObject("INSERT INTO subscriptions_subscriptions(account_id,profile,plan_id,plan_type,allowed_capacity) SELECT ?,'GANADERO',id,'GRATUITO',15 FROM subscriptions_plans WHERE profile='GANADERO' AND plan_type='GRATUITO' RETURNING id", UUID.class, admin);
         jdbc.update("INSERT INTO subscriptions_payments(subscription_id,account_id,plan_id,gateway_ref,amount,status) SELECT ?,?,plan_id,'retired-payment',0,'PENDING' FROM subscriptions_subscriptions WHERE id=?", subscription, admin, subscription);
-        // Upgrading V10 now applies V11 (retirement) and V12 (clinical cardinality).
-        assertThat(flyway("upgrade", "latest", true).migrate().migrationsExecuted).isEqualTo(2);
+        // Upgrading V10 now applies V11, V12 and V13, preserving product records.
+        assertThat(flyway("upgrade", "latest", true).migrate().migrationsExecuted).isEqualTo(3);
         assertFinalSchema("upgrade", jdbc);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM identity_accounts", Integer.class)).isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM livestock_animals", Integer.class)).isEqualTo(3);

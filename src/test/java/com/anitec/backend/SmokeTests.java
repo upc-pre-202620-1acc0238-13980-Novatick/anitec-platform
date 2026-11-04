@@ -394,7 +394,7 @@ class SmokeTests {
         // isolation: another farmer cannot read or modify
         assertThat(get("/api/v1/animals/" + animalId, other).status()).isEqualTo(403);
         assertThat(put("/api/v1/animals/" + animalId, Map.of(
-                "code", "BOV-001", "speciesId", speciesId, "sex", "MACHO"), other).status()).isEqualTo(403);
+                "code", "BOV-001", "speciesId", speciesId, "sex", "MACHO", "version", 0), other).status()).isEqualTo(403);
         assertThat(delete("/api/v1/animals/" + animalId, other).status()).isEqualTo(403);
         assertThat(post("/api/v1/animals/" + animalId + "/observations",
                 Map.of("text", "intruso"), other).status()).isEqualTo(403);

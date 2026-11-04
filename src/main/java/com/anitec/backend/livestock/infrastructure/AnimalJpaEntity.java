@@ -41,6 +41,9 @@ public class AnimalJpaEntity {
     @Id
     private UUID id;
 
+    @jakarta.persistence.Version
+    private Long version;
+
     @Column(name = "farm_id", nullable = false)
     private UUID farmId;
 
@@ -50,7 +53,7 @@ public class AnimalJpaEntity {
     @Column(name = "species_id", nullable = false)
     private UUID speciesId;
 
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, length = 30)
     private String code;
 
     private String name;
@@ -120,6 +123,7 @@ public class AnimalJpaEntity {
     public static AnimalJpaEntity fromDomain(Animal animal) {
         AnimalJpaEntity entity = new AnimalJpaEntity();
         entity.setId(animal.getId());
+        entity.setVersion(animal.getVersion());
         entity.setFarmId(animal.getFarmId());
         entity.setOwnerId(animal.getOwnerId());
         entity.setSpeciesId(animal.getSpeciesId());
@@ -153,6 +157,6 @@ public class AnimalJpaEntity {
         }
         restored.sort(java.util.Comparator.comparing(AnimalObservation::getCreatedAt));
         return Animal.restore(id, farmId, ownerId, speciesId, code, name, breed, sex, birthDate, status,
-                photoUrl, JpaTimes.toInstant(createdAt), JpaTimes.toInstant(updatedAt), restored);
+                photoUrl, JpaTimes.toInstant(createdAt), JpaTimes.toInstant(updatedAt), restored, version);
     }
 }

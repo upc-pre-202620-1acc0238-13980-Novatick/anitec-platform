@@ -19,7 +19,7 @@ import java.util.UUID;
 @Getter
 public class Animal {
 
-    public enum Sex {MACHO, HEMBRA}
+    public enum Sex {MACHO, HEMBRA, DESCONOCIDO}
 
     public enum Status {ACTIVO, INACTIVO, VENDIDO, FALLECIDO}
 
@@ -33,6 +33,7 @@ public class Animal {
     }
 
     private UUID id;
+    private Long version;
     private UUID farmId;
     private UUID ownerId;
     private UUID speciesId;
@@ -75,8 +76,9 @@ public class Animal {
     public static Animal restore(UUID id, UUID farmId, UUID ownerId, UUID speciesId, String code,
                                  String name, String breed, Sex sex, LocalDate birthDate, Status status,
                                  String photoUrl, Instant createdAt, Instant updatedAt,
-                                 List<AnimalObservation> observations) {
+                                 List<AnimalObservation> observations, Long version) {
         Animal animal = new Animal();
+        animal.version = version;
         animal.id = id;
         animal.farmId = farmId;
         animal.ownerId = ownerId;
@@ -100,7 +102,11 @@ public class Animal {
     public void updateDetails(String code, UUID speciesId, Sex sex, String name, String breed,
                               LocalDate birthDate, String photoUrl, Instant now) {
         requireValidBirthDate(birthDate);
-        this.code = AnimalCode.of(code);
+        AnimalCode normalized = AnimalCode.of(code);
+        if (!isActive() && !codeValue().equals(normalized.getValue())) {
+            throw DomainException.conflict("INVALID_STATE_TRANSITION", "No se puede cambiar el código de un animal dado de baja");
+        }
+        this.code = normalized;
         this.speciesId = speciesId;
         this.sex = sex;
         this.name = blankToNull(name);

@@ -70,7 +70,7 @@ public class AnimalController {
 
     public record AnimalDataRequest(
             @NotNull(message = "obligatorio") UUID farmId,
-            @NotBlank(message = "obligatorio") @Size(max = 50, message = "máximo 50 caracteres") String code,
+            String code,
             @NotNull(message = "obligatorio") UUID speciesId,
             @NotNull(message = "obligatorio") Animal.Sex sex,
             @Size(max = 100, message = "máximo 100 caracteres") String name,
@@ -80,7 +80,8 @@ public class AnimalController {
     }
 
     public record AnimalUpdateRequest(
-            @NotBlank(message = "obligatorio") @Size(max = 50, message = "máximo 50 caracteres") String code,
+            @NotBlank(message = "obligatorio") String code,
+            @NotNull(message = "obligatorio") @jakarta.validation.constraints.PositiveOrZero Long version,
             @NotNull(message = "obligatorio") UUID speciesId,
             @NotNull(message = "obligatorio") Animal.Sex sex,
             @Size(max = 100, message = "máximo 100 caracteres") String name,
@@ -107,7 +108,7 @@ public class AnimalController {
             UUID id, String code, String name, String species, String sex, String breed,
             LocalDate birthDate, Animal.Status status, UUID farmId, String farmName,
             long observationsCount, List<ObservationResponse> recentObservations,
-            long attentionsCount, List<CareQueries.AttentionSummary> recentAttentions) {
+            long attentionsCount, List<CareQueries.AttentionSummary> recentAttentions, Long version) {
     }
 
     public record StatusResponse(UUID id, Animal.Status status) {
@@ -136,7 +137,7 @@ public class AnimalController {
         LivestockQueries.AnimalListItem item = new LivestockQueries.AnimalListItem(
                 animal.getId(), animal.codeValue(), animal.getName(),
                 livestockQueries.speciesName(animal.getSpeciesId()), animal.getSpeciesId(),
-                animal.getStatus(), animal.getFarmId(), animal.getOwnerId());
+                animal.getStatus(), animal.getFarmId(), animal.getOwnerId(), animal.getVersion());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Animal registrado", item));
     }
@@ -192,7 +193,7 @@ public class AnimalController {
                 animal.getFarmId(), livestockQueries.farmName(animal.getFarmId()),
                 animal.getObservations().size(), observations,
                 careQueries.countForAnimal(animal.getId()),
-                careQueries.recentForAnimal(animal.getId(), RECENT_LIMIT));
+                careQueries.recentForAnimal(animal.getId(), RECENT_LIMIT), animal.getVersion());
         return ResponseEntity.ok(ApiResponse.ok(detail));
     }
 
@@ -202,11 +203,11 @@ public class AnimalController {
             @PathVariable UUID animalId, @Valid @RequestBody AnimalUpdateRequest request) {
         Animal animal = livestockService.updateAnimal(CurrentUser.id(), animalId, request.code(),
                 request.speciesId(), request.sex(), request.name(), request.breed(),
-                request.birthDate(), request.photoUrl());
+                request.birthDate(), request.photoUrl(), request.version());
         LivestockQueries.AnimalListItem item = new LivestockQueries.AnimalListItem(
                 animal.getId(), animal.codeValue(), animal.getName(),
                 livestockQueries.speciesName(animal.getSpeciesId()), animal.getSpeciesId(),
-                animal.getStatus(), animal.getFarmId(), animal.getOwnerId());
+                animal.getStatus(), animal.getFarmId(), animal.getOwnerId(), animal.getVersion());
         return ResponseEntity.ok(ApiResponse.ok("Animal actualizado", item));
     }
 
