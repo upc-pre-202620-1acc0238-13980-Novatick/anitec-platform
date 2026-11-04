@@ -20,7 +20,6 @@ public interface AnimalRepository {
 
     long countActiveByOwners(Collection<UUID> ownerScope);
 
-    long countBySpeciesId(UUID speciesId);
 
     long countByFarmId(UUID farmId);
 

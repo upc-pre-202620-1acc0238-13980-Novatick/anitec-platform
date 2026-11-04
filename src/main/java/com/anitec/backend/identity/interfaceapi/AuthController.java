@@ -14,7 +14,6 @@ import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -75,7 +74,9 @@ public class AuthController {
                 new IdentityService.RegisterCommand(
                         request.name(), request.lastName(), request.email(), request.password(), request.role()));
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok("Cuenta creada. Verifique su correo electrónico con el código enviado.",
+                .body(ApiResponse.ok("SENT".equals(result.emailDelivery())
+                                ? "Cuenta creada. Verifique su correo electrónico con el código enviado."
+                                : "Cuenta creada. No se pudo confirmar el envío del código de verificación.",
                         result));
     }
 

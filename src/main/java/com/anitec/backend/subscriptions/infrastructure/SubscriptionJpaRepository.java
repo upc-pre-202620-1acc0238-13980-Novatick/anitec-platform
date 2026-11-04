@@ -17,5 +17,4 @@ public interface SubscriptionJpaRepository extends JpaRepository<SubscriptionJpa
 
     List<SubscriptionJpaEntity> findByEndsAtBeforeAndStatus(OffsetDateTime now, Subscription.Status status);
 
-    List<SubscriptionJpaEntity> findByPlanId(UUID planId);
 }

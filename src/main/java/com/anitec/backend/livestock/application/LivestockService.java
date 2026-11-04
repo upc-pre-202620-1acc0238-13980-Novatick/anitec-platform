@@ -131,31 +131,6 @@ public class LivestockService {
         return observation;
     }
 
-    // -------------------------------------------------------- species admin
-
-    @Transactional
-    public Species createSpecies(String name, String description, String photoUrl) {
-        return species.save(Species.create(name, description, photoUrl, Instant.now()));
-    }
-
-    @Transactional
-    public Species updateSpecies(UUID speciesId, String name, String description, String photoUrl) {
-        Species found = species.findById(speciesId)
-                .orElseThrow(() -> DomainException.notFound("Especie no encontrada"));
-        found.update(name, description, photoUrl);
-        return species.save(found);
-    }
-
-    @Transactional
-    public void deleteSpecies(UUID speciesId) {
-        species.findById(speciesId)
-                .orElseThrow(() -> DomainException.notFound("Especie no encontrada"));
-        if (animals.countBySpeciesId(speciesId) > 0) {
-            throw DomainException.conflict("SPECIES_IN_USE", "La especie está en uso por al menos un animal");
-        }
-        species.delete(speciesId);
-    }
-
     // ------------------------------------- subscriptions -> capacity limits
 
     @EventListener

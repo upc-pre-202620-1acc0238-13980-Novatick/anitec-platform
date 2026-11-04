@@ -13,7 +13,6 @@ public interface AnimalJpaRepository extends JpaRepository<AnimalJpaEntity, UUID
 
     boolean existsByFarmIdAndCodeAndIdNot(UUID farmId, String code, UUID excludedAnimalId);
 
-    long countBySpeciesId(UUID speciesId);
 
     long countByFarmId(UUID farmId);
 

@@ -4,7 +4,6 @@ import com.anitec.backend.subscriptions.domain.PaymentGateway;
 import com.anitec.backend.subscriptions.domain.Plan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
@@ -14,10 +13,14 @@ import java.util.UUID;
  * ACL translating Stripe events into this model) plugs in behind the same
  * {@link PaymentGateway} port later.
  */
-@Component
 public class FakePaymentGateway implements PaymentGateway {
 
     private static final Logger log = LoggerFactory.getLogger(FakePaymentGateway.class);
+
+    @Override
+    public void requireSimulatedConfirmation() {
+        // This adapter is wired only for explicitly opted-in dev/test environments.
+    }
 
     @Override
     public String createCheckout(UUID accountId, Plan plan) {

@@ -40,8 +40,4 @@ public class SubscriptionRepositoryImpl implements SubscriptionRepository {
                 .map(SubscriptionJpaEntity::toDomain).toList();
     }
 
-    @Override
-    public List<Subscription> findByPlanId(UUID planId) {
-        return jpa.findByPlanId(planId).stream().map(SubscriptionJpaEntity::toDomain).toList();
-    }
 }

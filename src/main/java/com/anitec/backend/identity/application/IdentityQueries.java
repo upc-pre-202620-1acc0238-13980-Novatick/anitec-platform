@@ -3,20 +3,17 @@ package com.anitec.backend.identity.application;
 import com.anitec.backend.identity.domain.Account;
 import com.anitec.backend.identity.domain.AccountRepository;
 import com.anitec.backend.shared.domain.DomainException;
-import com.anitec.backend.shared.domain.Role;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Identity read model (report class IdentityQueries). Public query API for
- * other contexts (vet lookup by e-mail for invitations) and for the Admin
- * context (paged user listing).
+ * other contexts (vet lookup by e-mail for invitations) for the product profiles.
  */
 @Service
 @Transactional(readOnly = true)
@@ -47,23 +44,5 @@ public class IdentityQueries {
                 .collect(java.util.stream.Collectors.toMap(Account::getId, Account::fullName, (a, b) -> a));
     }
 
-    public record AccountSummary(UUID id, String email, String name, String lastName,
-                                 Role role, Account.Status status, boolean emailVerified) {
-        public static AccountSummary from(Account account) {
-            return new AccountSummary(account.getId(), account.getEmail(), account.getName(),
-                    account.getLastName(), account.getRole(), account.getStatus(), account.isVerified());
-        }
-    }
 
-    public record AccountPage(List<AccountSummary> content, int page, int size, long total) {
-    }
-
-    /** Admin user search (spec endpoint #52). */
-    public AccountPage searchAccounts(String query, Role role, int page, int size) {
-        int safeSize = Math.min(Math.max(size, 1), 100);
-        int safePage = Math.max(page, 0);
-        List<Account> found = accounts.search(query, role, safePage * safeSize, safeSize);
-        long total = accounts.countSearch(query, role);
-        return new AccountPage(found.stream().map(AccountSummary::from).toList(), safePage, safeSize, total);
-    }
 }

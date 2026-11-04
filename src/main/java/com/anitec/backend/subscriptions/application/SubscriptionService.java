@@ -23,7 +23,7 @@ import java.util.UUID;
 /**
  * Subscriptions service (report class SubscriptionService): plan catalogue,
  * checkout through the PaymentGateway port, idempotent payment confirmation
- * (TS02), renewal cancellation, expiry and admin plan management. Confirmed
+ * (TS02), renewal cancellation, expiry. Confirmed
  * limit changes are published as PremiumActivated/PremiumExpired events so
  * Livestock and Linking update their capacities with increasing revisions
  * (decision #12).
@@ -80,9 +80,6 @@ public class SubscriptionService {
     @EventListener
     @Transactional
     public void onAccountRegistered(Account.AccountRegistered event) {
-        if (event.role() == Role.ADMIN) {
-            return;
-        }
         if (subscriptions.existsByAccountId(event.accountId())) {
             return;
         }
@@ -126,6 +123,7 @@ public class SubscriptionService {
     /** TS02: idempotent confirmation - replays never duplicate effects. */
     @Transactional
     public PaymentResultView confirmPayment(UUID accountId, String checkoutId, PaymentOutcome outcome) {
+        paymentGateway.requireSimulatedConfirmation();
         Payment payment = payments.findByGatewayRef(checkoutId)
                 .orElseThrow(() -> DomainException.notFound("Pago no encontrado"));
         if (!payment.belongsTo(accountId)) {
@@ -213,45 +211,6 @@ public class SubscriptionService {
     @Transactional(readOnly = true)
     public SubscriptionView mySubscription(UUID accountId) {
         return toView(requireSubscription(accountId));
-    }
-
-    // ---------------------------------------------------- admin plan management
-
-    @Transactional
-    public PlanView createPlan(String name, Role profile, Plan.PlanType type, BigDecimal price,
-                               String currency, String billingPeriod, int capacityLimit, boolean active) {
-        Plan plan = Plan.create(name, profile, type, price, currency, billingPeriod, capacityLimit, active);
-        return PlanView.from(plans.save(plan));
-    }
-
-    /** A capacity change bumps the revision of every active subscription of the plan. */
-    @Transactional
-    public PlanView updatePlan(UUID planId, String name, BigDecimal price, Integer capacityLimit,
-                               Boolean active) {
-        Plan plan = plans.findById(planId)
-                .orElseThrow(() -> DomainException.notFound("Plan no encontrado"));
-        boolean limitChanged = capacityLimit != null && capacityLimit != plan.getCapacityLimit();
-        plan.update(name, price, capacityLimit, active);
-        plans.save(plan);
-
-        if (limitChanged) {
-            Instant now = Instant.now();
-            for (Subscription subscription : subscriptions.findByPlanId(planId)) {
-                if (subscription.getStatus() != Subscription.Status.ACTIVA) {
-                    continue;
-                }
-                subscription.applyCapacity(capacityLimit, now);
-                subscriptions.save(subscription);
-                events.publish(new Subscription.SubscriptionLimitChanged(subscription.getAccountId(),
-                        subscription.getProfile(), capacityLimit, subscription.getRevision()));
-            }
-        }
-        return PlanView.from(plan);
-    }
-
-    @Transactional(readOnly = true)
-    public List<PlanView> allPlans() {
-        return plans.findAll().stream().map(PlanView::from).toList();
     }
 
     // -------------------------------------------------------------- helpers

@@ -9,7 +9,6 @@ import java.util.UUID;
 /** Repository ports of the Subscriptions context. */
 public interface PlanRepository {
 
-    Plan save(Plan plan);
 
     Optional<Plan> findById(UUID planId);
 
@@ -17,5 +16,4 @@ public interface PlanRepository {
 
     Optional<Plan> findFreeByProfile(Role profile);
 
-    List<Plan> findAll();
 }
