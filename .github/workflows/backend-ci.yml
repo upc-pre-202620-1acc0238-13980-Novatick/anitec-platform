@@ -1,0 +1,74 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Backend tests (Java 21)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Temurin 21 and Maven cache
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+          cache-dependency-path: |
+            pom.xml
+            .mvn/wrapper/maven-wrapper.properties
+          overwrite-settings: false
+
+      - name: Verify Docker and prepare Maven Wrapper
+        run: |
+          docker info --format '{{.ServerVersion}}'
+          docker ps
+          chmod +x ./mvnw
+          ./mvnw -v
+
+      - name: Run all backend tests with Testcontainers
+        run: ./mvnw -B test
+
+      # Publish counts only: raw XML/logs can contain sensitive test payloads.
+      - name: Summarize Surefire results
+        if: ${{ !cancelled() }}
+        shell: python
+        run: |
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          reports = sorted(Path('target/surefire-reports').glob('TEST-*.xml'))
+          if not reports:
+              raise SystemExit('No Surefire reports were generated')
+          totals = {key: 0 for key in ('tests', 'failures', 'errors', 'skipped')}
+          for report in reports:
+              suite = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(suite.get(key, '0'))
+          print('Surefire totals: ' + json.dumps(totals, sort_keys=True))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('## Backend test results\n\n')
+              summary.write('| Tests | Failures | Errors | Skipped |\n| ---: | ---: | ---: | ---: |\n')
+              summary.write('| {tests} | {failures} | {errors} | {skipped} |\n'.format(**totals))
+          if totals['tests'] == 0 or any(totals[key] for key in ('failures', 'errors', 'skipped')):
+              raise SystemExit('The complete suite must pass without skipped tests')
