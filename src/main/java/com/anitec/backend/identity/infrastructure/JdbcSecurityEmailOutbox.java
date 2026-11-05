@@ -28,6 +28,7 @@ public class JdbcSecurityEmailOutbox implements SecurityEmailDelivery {
         if(!settings.enabled)return;
         try {
         UUID emission=jdbc.queryForObject("SELECT verification_emission_id FROM identity_accounts WHERE id=?",UUID.class,account.getId());
+        if(Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM identity_email_outbox WHERE purpose='EMAIL_VERIFICATION' AND emission_id=?)",Boolean.class,emission)))return;
         stage(account.getId(),emission,"EMAIL_VERIFICATION",account.getEmail(),account.getVerificationCode(),account.getVerificationExpiresAt());
         } catch(RuntimeException unavailable) {throw unavailable();}
     }

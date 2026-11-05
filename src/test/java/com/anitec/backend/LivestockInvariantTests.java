@@ -59,7 +59,7 @@ class LivestockInvariantTests {
         String password = "Test-" + UUID.randomUUID() + "aA1!";
         assertThat(call("POST", "/auth/register", Map.of("email",u.email,"password",password,"role",role,"name","Test","lastName","Inventory"), null).status()).isEqualTo(201);
         var account = accounts.findByEmail(u.email).orElseThrow(); u.id = account.getId();
-        assertThat(call("POST", "/auth/verify", Map.of("email",u.email,"code",account.getVerificationCode()),null).status()).isEqualTo(200);
+        assertThat(call("POST", "/auth/verify", Map.of("email",u.email,"code",TestVerificationCodes.code(account)),null).status()).isEqualTo(200);
         var login = call("POST","/auth/login",Map.of("email",u.email,"password",password),null);
         assertThat(login.status()).isEqualTo(200); u.token = login.data().path("accessToken").asText();
         if (role.equals("GANADERO")) {

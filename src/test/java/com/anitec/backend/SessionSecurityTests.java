@@ -51,7 +51,7 @@ class SessionSecurityTests {
  IdentityService.LoginResult login(Role role){
    String email=UUID.randomUUID()+"@example.invalid";
    identity.register(new IdentityService.RegisterCommand("Test","Session",email,"Test-Password1!",role));
-   identity.verifyEmail(email,accounts.findByEmail(email).orElseThrow().getVerificationCode());
+   identity.verifyEmail(email,TestVerificationCodes.code(accounts.findByEmail(email).orElseThrow()));
    return identity.login(email,"Test-Password1!");
  }
  UUID sid(String access){return UUID.fromString(jwt.parse(access).get("sid",String.class));}

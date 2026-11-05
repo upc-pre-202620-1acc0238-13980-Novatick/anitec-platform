@@ -35,7 +35,7 @@ class SessionRestartTests {
    try(var first=start(key,jwtKey)){
      var identity=first.getBean(IdentityService.class);String email=UUID.randomUUID()+"@example.invalid";
      identity.register(new IdentityService.RegisterCommand("Test","Restart",email,"Test-Password1!",Role.GANADERO));
-     identity.verifyEmail(email,first.getBean(AccountRepository.class).findByEmail(email).orElseThrow().getVerificationCode());
+     identity.verifyEmail(email,TestVerificationCodes.code(first.getBean(AccountRepository.class).findByEmail(email).orElseThrow()));
      login=identity.login(email,"Test-Password1!");result=identity.refresh(login.refreshToken(),op);
    }
    try(var second=start(key,jwtKey)){

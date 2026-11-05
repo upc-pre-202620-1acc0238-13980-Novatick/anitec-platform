@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class AccountVerificationPolicyTests {
     private Account pending(Instant now) {
-        return Account.create("policy@example.invalid", "unused", "Test", "Policy", Role.GANADERO, now);
+        return Account.create("policy@example.invalid", "unused", "Test", "Policy", Role.GANADERO, now, TestVerificationCodes.authenticator());
     }
 
     @Test
@@ -31,7 +31,7 @@ class AccountVerificationPolicyTests {
         Instant now = Instant.parse("2026-01-01T00:00:00Z");
         var account = pending(now);
         assertThat(account.getVerificationExpiresAt()).isEqualTo(now.plusSeconds(600));
-        assertThatThrownBy(() -> account.verifyEmail(account.getVerificationCode(), now.plusSeconds(600)))
+        assertThatThrownBy(() -> account.verifyEmail(account.getVerificationCode(), now.plusSeconds(600), TestVerificationCodes.authenticator()))
                 .isInstanceOfSatisfying(DomainException.class, ex -> assertThat(ex.errorCode()).isEqualTo("CODE_EXPIRED"));
         assertThat(account.isVerified()).isFalse();
     }
@@ -41,8 +41,8 @@ class AccountVerificationPolicyTests {
         Instant now = Instant.parse("2026-01-01T00:00:00Z");
         var account = pending(now);
         String previousCode = account.getVerificationCode();
-        assertThatThrownBy(() -> account.issueVerificationCode(now.plusSeconds(59))).isInstanceOf(DomainException.class);
-        account.issueVerificationCode(now.plusSeconds(60));
+        assertThatThrownBy(() -> account.issueVerificationCode(now.plusSeconds(59), TestVerificationCodes.authenticator())).isInstanceOf(DomainException.class);
+        account.issueVerificationCode(now.plusSeconds(60), TestVerificationCodes.authenticator());
         assertThat(previousCode.equals(account.getVerificationCode())).isFalse();
         assertThat(account.getVerificationResends()).isEqualTo(1);
         assertThat(account.getVerificationExpiresAt()).isEqualTo(now.plusSeconds(660));

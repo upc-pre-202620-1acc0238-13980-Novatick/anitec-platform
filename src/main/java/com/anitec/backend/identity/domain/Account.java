@@ -54,7 +54,12 @@ public class Account {
     private String phone;
     private Role role;
     private Status status;
-    private String verificationCode;
+    /** Ephemeral issuance value, never reconstructed by persistence. */
+    private transient String verificationCode;
+    private byte[] verificationVerifier;
+    private UUID verificationEmissionId;
+
+    public byte[] getVerificationVerifier(){return verificationVerifier==null?null:verificationVerifier.clone();}
     private Instant verificationExpiresAt;
     private int verificationAttempts;
     private int verificationResends;
@@ -87,7 +92,7 @@ public class Account {
     }
 
     public static Account create(String email, String passwordHash, String name, String lastName,
-                                 Role role, Instant now) {
+                                 Role role, Instant now, EmailVerificationAuthenticator authenticator) {
         Account account = new Account();
         account.id = UUID.randomUUID();
         account.email = normalizeEmail(email);
@@ -100,14 +105,14 @@ public class Account {
         account.updatedAt = now;
         account.verificationAttempts = 0;
         account.verificationResends = 0;
-        issueCode(account, now);
+        issueCode(account, now, authenticator);
         return account;
     }
 
     /** Reconstitution factory used by the persistence adapter. */
     public static Account restore(UUID id, String email, String passwordHash, String name, String lastName,
                                   String photoUrl, String address, String dni, String phone, Role role,
-                                  Status status, String verificationCode, Instant verificationExpiresAt,
+                                  Status status, byte[] verificationVerifier, UUID verificationEmissionId, Instant verificationExpiresAt,
                                   int verificationAttempts, int verificationResends, Instant verificationSentAt,
                                   Instant verifiedAt, Instant createdAt, Instant updatedAt,
                                   Instant verificationWindowStartedAt, Instant verificationPolicyMigratedAt) {
@@ -123,7 +128,8 @@ public class Account {
         account.phone = phone;
         account.role = role;
         account.status = status;
-        account.verificationCode = verificationCode;
+        account.verificationVerifier = verificationVerifier==null?null:verificationVerifier.clone();
+        account.verificationEmissionId = verificationEmissionId;
         account.verificationExpiresAt = verificationExpiresAt;
         account.verificationAttempts = verificationAttempts;
         account.verificationResends = verificationResends;
@@ -139,7 +145,7 @@ public class Account {
     // ----------------------------------------------------------- operations
 
     /** Generates (or replaces) the 6 digit verification code applying the policy. */
-    public String issueVerificationCode(Instant now) {
+    public String issueVerificationCode(Instant now, EmailVerificationAuthenticator authenticator) {
         requirePendingVerification();
         boolean freshWindow = verificationWindowStartedAt == null
                 || !now.isBefore(verificationWindowStartedAt.plus(VERIFICATION_WINDOW));
@@ -157,10 +163,13 @@ public class Account {
             verificationResends = 0;
         }
         verificationResends++;
-        String previous = verificationCode;
-        do {
-            verificationCode = randomCode();
-        } while (verificationCode.equals(previous));
+        byte[] previous=verificationVerifier;
+        String candidate;
+        do {candidate=randomCode();}
+        while(previous!=null && MessageDigest.isEqual(previous,authenticator.sign(id,verificationEmissionId,candidate)));
+        verificationCode=candidate;
+        verificationEmissionId=UUID.randomUUID();
+        verificationVerifier=authenticator.sign(id,verificationEmissionId,verificationCode);
         verificationExpiresAt = now.plus(CODE_TTL);
         verificationAttempts = 0;
         verificationSentAt = now;
@@ -179,26 +188,26 @@ public class Account {
     }
 
     /** Verifies the e-mail (US26). Sending a code never equals verifying it. */
-    public void verifyEmail(String code, Instant now) {
+    public void verifyEmail(String code, Instant now, EmailVerificationAuthenticator authenticator) {
         requirePendingVerification();
         if (verificationAttempts >= MAX_CODE_ATTEMPTS) {
             throw DomainException.business("CODE_ATTEMPTS_EXCEEDED",
                     "Se agotaron los intentos de verificación; solicite un código nuevo");
         }
-        if (verificationCode == null) {
+        if (verificationVerifier == null) {
             throw DomainException.business("INVALID_CODE",
                     "No hay un código de verificación vigente; solicite uno nuevo");
         }
         if (!now.isBefore(verificationExpiresAt)) {
             throw DomainException.business("CODE_EXPIRED", "El código de verificación expiró; solicite uno nuevo");
         }
-        boolean matches = MessageDigest.isEqual(
-                code == null ? new byte[0] : code.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                verificationCode.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        boolean matches=code!=null && code.matches("[0-9]{6}") && MessageDigest.isEqual(
+                verificationVerifier,authenticator.sign(id,verificationEmissionId,code));
         if (!matches) {
             verificationAttempts++;
             if (verificationAttempts >= MAX_CODE_ATTEMPTS) {
                 verificationCode = null;
+                verificationVerifier = null;
                 updatedAt = now;
                 throw DomainException.business("CODE_ATTEMPTS_EXCEEDED",
                         "Se agotaron los intentos de verificación; solicite un código nuevo");
@@ -209,6 +218,7 @@ public class Account {
         status = Status.ACTIVA;
         verifiedAt = now;
         verificationCode = null;
+        verificationVerifier = null;
         verificationExpiresAt = null;
         verificationAttempts = 0;
         verificationResends = 0;
@@ -246,8 +256,10 @@ public class Account {
         return email == null ? null : email.trim().toLowerCase();
     }
 
-    private static void issueCode(Account account, Instant now) {
+    private static void issueCode(Account account, Instant now, EmailVerificationAuthenticator authenticator) {
         account.verificationCode = randomCode();
+        account.verificationEmissionId = UUID.randomUUID();
+        account.verificationVerifier = authenticator.sign(account.id,account.verificationEmissionId,account.verificationCode);
         account.verificationExpiresAt = now.plus(CODE_TTL);
         account.verificationSentAt = now;
         account.verificationWindowStartedAt = now;

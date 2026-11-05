@@ -1,0 +1,34 @@
+package com.anitec.backend;
+import com.anitec.backend.identity.infrastructure.*;
+import com.anitec.backend.identity.domain.*;
+import com.anitec.backend.shared.domain.Role;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.mock.env.MockEnvironment;
+import java.util.*;
+import java.nio.charset.StandardCharsets;
+import static org.assertj.core.api.Assertions.*;
+
+class EmailVerificationHmacTests {
+ MockEnvironment valid(){return new MockEnvironment().withProperty("EMAIL_VERIFICATION_HMAC_KEY",EmailCryptoSettingsTests.key());}
+ @ParameterizedTest @ValueSource(strings={"", "invalid!", "c2hvcnQ="}) void missingOrInvalidKeyRejected(String key){assertThatThrownBy(()->new EmailVerificationHmac(new MockEnvironment().withProperty("EMAIL_VERIFICATION_HMAC_KEY",key))).isInstanceOf(IllegalStateException.class);}
+ @Test void oversizedKeyRejected(){assertThatThrownBy(()->new EmailVerificationHmac(new MockEnvironment().withProperty("EMAIL_VERIFICATION_HMAC_KEY",Base64.getEncoder().encodeToString(new byte[64])))).isInstanceOf(IllegalStateException.class);}
+ @ParameterizedTest @ValueSource(strings={"prod","dev","test","prod,test","prod,dev,test"}) void profilesCannotBypassMandatoryKey(String profiles){var e=new MockEnvironment();e.setActiveProfiles(profiles.split(","));assertThatThrownBy(()->new EmailVerificationEnvironmentPostProcessor().postProcessEnvironment(e,null)).isInstanceOf(IllegalStateException.class);}
+ @ParameterizedTest @ValueSource(strings={"SESSION_RECOVERY_KEY","identity.sessions.recovery-key","PASSWORD_RECOVERY_HMAC_KEY","identity.password-recovery.hmac-key","EMAIL_OUTBOX_ENCRYPTION_KEY","email.delivery.encryption-key","JWT_SECRET","jwt.secret"})
+ void configuredKeysCannotBeReusedEvenWhenFeaturesAreOff(String property){var e=valid().withProperty("email.delivery.mode","disabled").withProperty("identity.password-recovery.enabled","false");e.setProperty(property,e.getProperty("EMAIL_VERIFICATION_HMAC_KEY"));assertThatThrownBy(()->new EmailVerificationHmac(e)).hasMessageContaining("independent");}
+ @Test void literalJwtKeyEquivalenceAlsoRejected(){String literal="x".repeat(32);var e=new MockEnvironment().withProperty("EMAIL_VERIFICATION_HMAC_KEY",Base64.getEncoder().encodeToString(literal.getBytes(StandardCharsets.UTF_8))).withProperty("jwt.secret",literal);assertThatThrownBy(()->new EmailVerificationHmac(e)).hasMessageContaining("independent");}
+ @Test void hmacMatchesIndependentComputationAndPreservesLeadingZeros()throws Exception{var env=valid();var h=new EmailVerificationHmac(env);UUID a=UUID.randomUUID(),e=UUID.randomUUID();var mac=javax.crypto.Mac.getInstance("HmacSHA256");mac.init(new javax.crypto.spec.SecretKeySpec(Base64.getDecoder().decode(env.getProperty("EMAIL_VERIFICATION_HMAC_KEY")),"HmacSHA256"));assertThat(h.sign(a,e,"000007")).isEqualTo(mac.doFinal(("email-verification:v1\0"+a+"\0"+e+"\0"+"000007").getBytes(StandardCharsets.UTF_8))).hasSize(32);assertThat(h.sign(a,e,"000007")).isNotEqualTo(h.sign(a,e,"000070"));}
+ @Test void accountEmissionPurposeAndKeyAreBound()throws Exception{var env=valid();var h=new EmailVerificationHmac(env);UUID a=UUID.randomUUID(),e=UUID.randomUUID();byte[] proof=h.sign(a,e,"000007");assertThat(proof).isNotEqualTo(h.sign(UUID.randomUUID(),e,"000007")).isNotEqualTo(h.sign(a,UUID.randomUUID(),"000007")).isNotEqualTo(new EmailVerificationHmac(valid()).sign(a,e,"000007"));var mac=javax.crypto.Mac.getInstance("HmacSHA256");mac.init(new javax.crypto.spec.SecretKeySpec(Base64.getDecoder().decode(env.getProperty("EMAIL_VERIFICATION_HMAC_KEY")),"HmacSHA256"));assertThat(proof).isNotEqualTo(mac.doFinal(("password-recovery:v1\0"+a+"\0"+e+"\0"+"000007").getBytes(StandardCharsets.UTF_8)));}
+ @Test void configuredKeyIsStableAcrossRestarts(){var env=valid();UUID a=UUID.randomUUID(),e=UUID.randomUUID();assertThat(new EmailVerificationHmac(env).sign(a,e,"000007")).isEqualTo(new EmailVerificationHmac(env).sign(a,e,"000007"));}
+ @ParameterizedTest @ValueSource(strings={"12345","1234567","abcdef","１２３４５６"," 00007"}) void onlySixAsciiDigitsAccepted(String code){assertThatThrownBy(()->new EmailVerificationHmac(valid()).sign(UUID.randomUUID(),UUID.randomUUID(),code)).hasMessage("Invalid email verification proof input");}
+ @Test void failuresNeverContainConfiguredKey(){String key=EmailCryptoSettingsTests.key();var env=new MockEnvironment().withProperty("EMAIL_VERIFICATION_HMAC_KEY",key).withProperty("EMAIL_OUTBOX_ENCRYPTION_KEY",key);assertThatThrownBy(()->new EmailVerificationHmac(env)).satisfies(e->{assertThat(e.getMessage()).doesNotContain(key);assertThat(e.getCause()).isNull();});}
+ @Test void wrongKeyCannotValidateDomainCode(){var a=Account.create("test@example.invalid","synthetic-hash","Test","Proof",Role.GANADERO,java.time.Instant.now(),new EmailVerificationHmac(valid()));String code=a.getVerificationCode();assertThatThrownBy(()->a.verifyEmail(code,java.time.Instant.now(),new EmailVerificationHmac(valid()))).isInstanceOf(com.anitec.backend.shared.domain.DomainException.class);assertThat(a.getVerificationAttempts()).isEqualTo(1);assertThat(a.canSignIn()).isFalse();}
+ @Test void verifierGetterDoesNotAllowMutation(){var a=Account.create("test@example.invalid","synthetic-hash","Test","Proof",Role.GANADERO,java.time.Instant.now(),TestVerificationCodes.authenticator());byte[] before=a.getVerificationVerifier();byte[] exposed=a.getVerificationVerifier();exposed[0]^=1;assertThat(a.getVerificationVerifier()).isEqualTo(before);}
+ @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods=false) static class StartupProbe {
+  static final java.util.concurrent.atomic.AtomicBoolean initialized=new java.util.concurrent.atomic.AtomicBoolean();
+  @org.springframework.context.annotation.Bean String probe(){initialized.set(true);return "probe";}
+ }
+ @ParameterizedTest @ValueSource(strings={"","invalid!"}) void startupFailsBeforeBeansAndMigrationEvenWithMixedProfiles(String key){StartupProbe.initialized.set(false);var app=new org.springframework.boot.SpringApplication(StartupProbe.class);app.setWebApplicationType(org.springframework.boot.WebApplicationType.NONE);app.setLogStartupInfo(false);assertThatThrownBy(()->app.run("--anitec.tests.omit-verification-key=true","--identity.email-verification.hmac-key="+key,"--EMAIL_VERIFICATION_HMAC_KEY=","--spring.profiles.active=prod,test","--jwt.secret=test-only-jwt-secret-value-with-more-than-32-bytes","--spring.flyway.placeholders.demo_seed=false","--payments.simulation-enabled=false","--email.delivery.mode=disabled","--identity.password-recovery.enabled=false","--spring.main.banner-mode=off")).isInstanceOf(IllegalStateException.class).hasMessageContaining("verification");assertThat(StartupProbe.initialized).isFalse();}
+
+}

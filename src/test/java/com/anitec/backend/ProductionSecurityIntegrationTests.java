@@ -49,7 +49,7 @@ class ProductionSecurityIntegrationTests {
             var jdbc = context.getBean(JdbcTemplate.class);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM identity_accounts", Integer.class)).isEqualTo(0);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class))
-                    .isEqualTo(17);
+                    .isEqualTo(18);
 
             var identity = context.getBean(IdentityService.class);
             String email = "production-probe@example.invalid";
@@ -58,7 +58,7 @@ class ProductionSecurityIntegrationTests {
                     password, Role.GANADERO));
             assertThat(created.emailDelivery()).isEqualTo("UNCONFIRMED");
             var account = context.getBean(AccountRepository.class).findByEmail(email).orElseThrow();
-            identity.verifyEmail(email, account.getVerificationCode());
+            identity.verifyEmail(email, TestVerificationCodes.code(account));
             String token = identity.login(email, password).accessToken();
             var subscriptions = context.getBean(SubscriptionService.class);
             var before = subscriptions.mySubscription(account.getId());

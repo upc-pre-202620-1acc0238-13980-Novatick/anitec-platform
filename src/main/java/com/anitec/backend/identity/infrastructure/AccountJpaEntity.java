@@ -60,8 +60,10 @@ public class AccountJpaEntity {
     @Column(nullable = false)
     private Account.Status status;
 
-    @Column(name = "verification_code", length = 6)
-    private String verificationCode;
+    @Column(name = "verification_verifier")
+    private byte[] verificationVerifier;
+    @Column(name = "verification_emission_id", nullable = false)
+    private UUID verificationEmissionId;
 
     @Column(name = "verification_expires_at")
     private OffsetDateTime verificationExpiresAt;
@@ -102,7 +104,8 @@ public class AccountJpaEntity {
         entity.setPhone(account.getPhone());
         entity.setRole(account.getRole());
         entity.setStatus(account.getStatus());
-        entity.setVerificationCode(account.getVerificationCode());
+        entity.setVerificationVerifier(account.getVerificationVerifier());
+        entity.setVerificationEmissionId(account.getVerificationEmissionId());
         entity.setVerificationExpiresAt(toJdbc(account.getVerificationExpiresAt()));
         entity.setVerificationAttempts(account.getVerificationAttempts());
         entity.setVerificationResends(account.getVerificationResends());
@@ -117,7 +120,7 @@ public class AccountJpaEntity {
 
     public Account toDomain() {
         return Account.restore(id, email, passwordHash, name, lastName, photoUrl, address, dni, phone,
-                role, status, verificationCode, toInstant(verificationExpiresAt), verificationAttempts,
+                role, status, verificationVerifier, verificationEmissionId, toInstant(verificationExpiresAt), verificationAttempts,
                 verificationResends, toInstant(verificationSentAt), toInstant(verifiedAt),
                 toInstant(createdAt), toInstant(updatedAt),
                 toInstant(verificationWindowStartedAt), toInstant(verificationPolicyMigratedAt));

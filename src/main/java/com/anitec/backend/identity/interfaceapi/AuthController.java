@@ -63,6 +63,7 @@ public class AuthController {
             @NotBlank @Email String email,
             @NotBlank @Pattern(regexp = "[0-9]{6}", message = "debe tener 6 dígitos") String code,
             @Size(max = 256) String password) {
+        @Override public String toString(){return "VerifyRequest[REDACTED]";}
     }
 
     public record ResendCodeRequest(@NotBlank @Email String email, @Size(max = 256) String password) {

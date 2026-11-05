@@ -197,7 +197,7 @@ class SmokeTests {
         String email = uniqueEmail(tag);
         Res created = register(email, role);
         assertThat(created.status()).isEqualTo(201);
-        String code = accountRepository.findByEmail(email).orElseThrow().getVerificationCode();
+        String code = TestVerificationCodes.code(accountRepository.findByEmail(email).orElseThrow());
         Res verified = post("/api/v1/auth/verify", Map.of("email", email, "code", code), null);
         assertThat(verified.status()).isEqualTo(200);
         Res login = post("/api/v1/auth/login", Map.of("email", email, "password", PASSWORD), null);
@@ -322,7 +322,7 @@ class SmokeTests {
     }
 
     private String codeOf(String email) {
-        return accountRepository.findByEmail(email).orElseThrow().getVerificationCode();
+        return TestVerificationCodes.code(accountRepository.findByEmail(email).orElseThrow());
     }
 
     // ------------------------------------------------------------ test 2
