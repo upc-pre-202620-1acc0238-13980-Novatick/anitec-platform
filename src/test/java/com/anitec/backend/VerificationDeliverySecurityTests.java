@@ -22,7 +22,7 @@ class VerificationDeliverySecurityTests {
         when(passwords.encode(anyString())).thenReturn("synthetic-hash");
         when(accounts.save(any(Account.class))).thenAnswer(call->call.getArgument(0));
         // Registration stages work and never calls the provider.
-        var service=new IdentityService(accounts,passwords,sender,events,mock(com.anitec.backend.identity.application.SessionService.class));
+        var service=new IdentityService(accounts,passwords,sender,events,mock(com.anitec.backend.identity.application.SessionService.class),TestVerificationCodes.authenticator());
         Logger logger=(Logger) LoggerFactory.getLogger(IdentityService.class);var appender=new ListAppender<ILoggingEvent>();
         appender.start();logger.addAppender(appender);
         try {

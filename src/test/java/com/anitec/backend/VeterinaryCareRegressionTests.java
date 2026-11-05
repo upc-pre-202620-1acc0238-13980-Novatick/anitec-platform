@@ -104,7 +104,7 @@ class VeterinaryCareRegressionTests {
         String password = "Test-" + UUID.randomUUID() + "aA1!";
         assertThat(call("POST", "/auth/register", Map.of("name", "Care", "lastName", "Test",
                 "email", user.email, "password", password, "role", role), null).status()).isEqualTo(201);
-        String code = accounts.findByEmail(user.email).orElseThrow().getVerificationCode();
+        String code = TestVerificationCodes.code(accounts.findByEmail(user.email).orElseThrow());
         assertThat(call("POST", "/auth/verify", Map.of("email", user.email, "code", code), null)
                 .status()).isEqualTo(200);
         var login = call("POST", "/auth/login", Map.of("email", user.email, "password", password), null);

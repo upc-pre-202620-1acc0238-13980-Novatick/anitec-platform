@@ -73,3 +73,7 @@ email:
     max-attempts: ${EMAIL_MAX_ATTEMPTS:5}
     poll-ms: ${EMAIL_POLL_MS:1000}
     batch-size: ${EMAIL_BATCH_SIZE:10}
+
+# EMAIL_VERIFICATION_HMAC_KEY (or identity.email-verification.hmac-key) is REQUIRED
+# in every runtime, even when delivery/recovery are disabled. No fallback is supplied.
+# Supply 32 random bytes in Base64, independently of JWT/session/recovery/outbox keys.

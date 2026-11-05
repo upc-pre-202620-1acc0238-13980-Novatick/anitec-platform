@@ -28,6 +28,7 @@ public class PasswordRecoveryController {
     }
     public record Confirm(@NotBlank @Email @Size(max=150) String email,String code,String newPassword) {
         public Confirm { email=com.anitec.backend.identity.domain.Account.normalizeEmail(email); }
+        @Override public String toString(){return "PasswordRecoveryConfirm[REDACTED]";}
     }
     @PostMapping("/request")
     @Operation(summary="Solicitar recuperación de contraseña",description="202 genérico: aceptación para procesamiento, no entrega. Deshabilitado por defecto.")

@@ -1,6 +1,7 @@
 package com.anitec.backend.identity.application;
 
 import com.anitec.backend.identity.domain.Account;
+import com.anitec.backend.identity.domain.EmailVerificationAuthenticator;
 import com.anitec.backend.identity.domain.AccountRepository;
 import com.anitec.backend.shared.application.DomainEventDispatcher;
 import com.anitec.backend.shared.domain.DomainException;
@@ -27,16 +28,18 @@ public class IdentityService {
     private final DomainEventDispatcher events;
     private final String unavailableCredentialHash;
     private final SessionService sessions;
+    private final EmailVerificationAuthenticator verification;
 
     public IdentityService(AccountRepository accounts,
                            PasswordEncoderPort passwordEncoder,
                            SecurityEmailDelivery emailDelivery,
-                           DomainEventDispatcher events, SessionService sessions) {
+                           DomainEventDispatcher events, SessionService sessions, EmailVerificationAuthenticator verification) {
         this.accounts = accounts;
         this.passwordEncoder = passwordEncoder;
         this.emailDelivery = emailDelivery;
         this.events = events;
         this.sessions = sessions;
+        this.verification = verification;
         this.unavailableCredentialHash = passwordEncoder.encode("unavailable-verification-context");
     }
 
@@ -73,7 +76,7 @@ public class IdentityService {
 
         String hash = passwordEncoder.encode(command.password());
         Account account = Account.create(email, hash, command.name().trim(), command.lastName().trim(),
-                command.role(), Instant.now());
+                command.role(), Instant.now(), verification);
 
         try {
             accounts.save(account);
@@ -91,7 +94,7 @@ public class IdentityService {
         Account account = accounts.findByEmailForUpdate(Account.normalizeEmail(email))
                 .orElseThrow(() -> DomainException.business("INVALID_CODE", "Código inválido o cuenta no encontrada"));
         try {
-            account.verifyEmail(code, Instant.now());
+            account.verifyEmail(code, Instant.now(), verification);
         } catch (DomainException failure) {
             // Commit the failed-attempt state before returning the business error.
             // Infrastructure failures still roll back normally.
@@ -130,7 +133,7 @@ public class IdentityService {
         if (account.getStatus() != Account.Status.PENDIENTE) {
             throw DomainException.conflict("VERIFICATION_NOT_PENDING", "No hay una verificación pendiente disponible");
         }
-        account.issueVerificationCode(Instant.now());
+        account.issueVerificationCode(Instant.now(), verification);
         accounts.save(account);
         emailDelivery.verification(account);
         return new EmailDelivery(account.getEmail(), "UNCONFIRMED",

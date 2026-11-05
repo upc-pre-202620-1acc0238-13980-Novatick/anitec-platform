@@ -45,7 +45,7 @@ class IdentityVerificationTests {
         return email;
     }
 
-    private String code(String email) { return accounts.findByEmail(email).orElseThrow().getVerificationCode(); }
+    private String code(String email) { return TestVerificationCodes.code(accounts.findByEmail(email).orElseThrow()); }
     private String wrong(String email) { return "000000".equals(code(email)) ? "000001" : "000000"; }
     private int attempts(String email) { return accounts.findByEmail(email).orElseThrow().getVerificationAttempts(); }
     private ResponseEntity<JsonNode> verify(String email, String code) {
@@ -91,7 +91,7 @@ class IdentityVerificationTests {
             assertThat(result.getStatusCode().value()).isEqualTo(422);
             assertThat(attempts(email)).isEqualTo(i);
         }
-        assertThat(code(email) == null).isTrue();
+        assertThat(accounts.findByEmail(email).orElseThrow().getVerificationVerifier()).isNull();
         assertThat(verify(email, correct).getStatusCode().value()).isEqualTo(422);
         assertThat(accounts.findByEmail(email).orElseThrow().isVerified()).isFalse();
     }
@@ -99,7 +99,7 @@ class IdentityVerificationTests {
     @Test
     void exhaustedCodeCannotBypassResendCooldownOrWindowLimit() {
         String email = register();
-        jdbc.update("UPDATE identity_accounts SET verification_attempts=5,verification_code=NULL,verification_resends=5 WHERE email=?", email);
+        jdbc.update("UPDATE identity_accounts SET verification_attempts=5,verification_verifier=NULL,verification_code=NULL,verification_resends=5 WHERE email=?", email);
         assertThat(resend(email).getStatusCode().value()).isEqualTo(429);
         jdbc.update("UPDATE identity_accounts SET verification_sent_at=now()-interval '2 minutes' WHERE email=?", email);
         assertThat(resend(email).getStatusCode().value()).isEqualTo(429);
@@ -119,7 +119,7 @@ class IdentityVerificationTests {
         var responses = concurrent(12, i -> verify(email, incorrect));
         assertThat(responses).allSatisfy(response -> assertThat(response.getStatusCode().value()).isEqualTo(422));
         assertThat(attempts(email)).isEqualTo(5);
-        assertThat(code(email) == null).isTrue();
+        assertThat(accounts.findByEmail(email).orElseThrow().getVerificationVerifier()).isNull();
         assertThat(responses.stream().filter(r -> r.getBody().path("errorCode").asText().equals("INVALID_CODE")).count()).isEqualTo(4);
     }
 
@@ -197,7 +197,7 @@ class IdentityVerificationTests {
             assertThat(responses.get(1).getStatusCode().value()).isEqualTo(409);
             assertThat(stored.isVerified()).isTrue();
             assertThat(stored.getVerificationResends()).isZero();
-            assertThat(stored.getVerificationCode() == null).isTrue();
+            assertThat(stored.getVerificationVerifier()).isNull();
         } else {
             assertThat(responses.getFirst().getStatusCode().value()).isEqualTo(422);
             assertThat(stored.isVerified()).isFalse();
@@ -287,7 +287,7 @@ class IdentityVerificationTests {
     @Test
     void expiredWindowRecoversAndNewWindowConsumesFirstSlot() {
         String email=register();
-        jdbc.update("UPDATE identity_accounts SET verification_window_started_at=now()-interval '25 hours', verification_sent_at=now()-interval '2 minutes', verification_resends=5, verification_attempts=5,verification_code=NULL WHERE email=?",email);
+        jdbc.update("UPDATE identity_accounts SET verification_window_started_at=now()-interval '25 hours', verification_sent_at=now()-interval '2 minutes', verification_resends=5, verification_attempts=5,verification_verifier=NULL,verification_code=NULL WHERE email=?",email);
         var response=resend(email);
         assertThat(response.getStatusCode().value()).isEqualTo(202);
         assertThat(response.getBody().path("data").path("remainingResends").asInt()).isEqualTo(4);
@@ -354,7 +354,7 @@ class IdentityVerificationTests {
             identity.resendVerificationCode(email);throw new IllegalStateException("Intentional rollback");
         })).isInstanceOf(IllegalStateException.class);
         var after=accounts.findByEmail(email).orElseThrow();
-        assertThat(after.getVerificationCode().equals(before.getVerificationCode())).isTrue();
+        assertThat(after.getVerificationVerifier()).isEqualTo(before.getVerificationVerifier());
         assertThat(after.getVerificationAttempts()).isEqualTo(2);assertThat(after.getVerificationResends()).isEqualTo(5);
         assertThat(after.getVerificationWindowStartedAt()).isEqualTo(before.getVerificationWindowStartedAt());
         assertThat(after.getVerificationSentAt()).isEqualTo(before.getVerificationSentAt());

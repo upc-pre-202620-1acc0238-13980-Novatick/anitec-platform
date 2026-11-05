@@ -1,3 +1,4 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
 com.anitec.backend.shared.infrastructure.DataSourceUrlEnvironmentPostProcessor,\
-com.anitec.backend.shared.infrastructure.ProductionSecurityEnvironmentPostProcessor
+com.anitec.backend.shared.infrastructure.ProductionSecurityEnvironmentPostProcessor,\
+com.anitec.backend.identity.infrastructure.EmailVerificationEnvironmentPostProcessor
