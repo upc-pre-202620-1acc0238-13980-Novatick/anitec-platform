@@ -2,12 +2,9 @@ package com.anitec.backend.identity.application;
 
 import com.anitec.backend.identity.domain.Account;
 import com.anitec.backend.identity.domain.AccountRepository;
-import com.anitec.backend.identity.domain.EmailSender;
 import com.anitec.backend.shared.application.DomainEventDispatcher;
 import com.anitec.backend.shared.domain.DomainException;
 import com.anitec.backend.shared.domain.Role;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,22 +21,20 @@ import java.util.UUID;
 @Service
 public class IdentityService {
 
-    private static final Logger log = LoggerFactory.getLogger(IdentityService.class);
-
     private final AccountRepository accounts;
     private final PasswordEncoderPort passwordEncoder;
-    private final EmailSender emailSender;
+    private final SecurityEmailDelivery emailDelivery;
     private final DomainEventDispatcher events;
     private final String unavailableCredentialHash;
     private final SessionService sessions;
 
     public IdentityService(AccountRepository accounts,
                            PasswordEncoderPort passwordEncoder,
-                           EmailSender emailSender,
+                           SecurityEmailDelivery emailDelivery,
                            DomainEventDispatcher events, SessionService sessions) {
         this.accounts = accounts;
         this.passwordEncoder = passwordEncoder;
-        this.emailSender = emailSender;
+        this.emailDelivery = emailDelivery;
         this.events = events;
         this.sessions = sessions;
         this.unavailableCredentialHash = passwordEncoder.encode("unavailable-verification-context");
@@ -86,9 +81,9 @@ public class IdentityService {
             throw DomainException.conflict("EMAIL_ALREADY_REGISTERED", "Ya existe una cuenta con ese correo");
         }
 
-        boolean sent = sendVerificationEmail(account);
+        emailDelivery.verification(account);
         events.publish(new Account.AccountRegistered(account.getId(), account.getEmail(), account.getRole()));
-        return new RegisterResult(account.getId(), account.getEmail(), sent ? "SENT" : "UNCONFIRMED");
+        return new RegisterResult(account.getId(), account.getEmail(), "UNCONFIRMED");
     }
 
     @Transactional(noRollbackFor = DomainException.class)
@@ -137,8 +132,8 @@ public class IdentityService {
         }
         account.issueVerificationCode(Instant.now());
         accounts.save(account);
-        boolean sent = sendVerificationEmail(account);
-        return new EmailDelivery(account.getEmail(), sent ? "SENT" : "UNCONFIRMED",
+        emailDelivery.verification(account);
+        return new EmailDelivery(account.getEmail(), "UNCONFIRMED",
                 Account.MAX_CODE_RESENDS - account.getVerificationResends(), account.nextVerificationResendAt(Instant.now()));
     }
 
@@ -175,17 +170,4 @@ public class IdentityService {
                 .orElseThrow(() -> DomainException.notFound("Cuenta no encontrada"));
     }
 
-    // ------------------------------------------------------------- helpers
-
-    private boolean sendVerificationEmail(Account account) {
-        String body = "Hola " + account.getName() + ",\n\n"
-                + "Tu código de verificación de ANITEC es: " + account.getVerificationCode() + "\n"
-                + "Vence en 10 minutos. Si no solicitaste este correo, ignóralo.";
-        try {
-            return emailSender.send(account.getEmail(), "ANITEC - Código de verificación", body);
-        } catch (Exception ex) {
-            log.warn("Verification e-mail delivery could not be confirmed");
-            return false;
-        }
-    }
 }

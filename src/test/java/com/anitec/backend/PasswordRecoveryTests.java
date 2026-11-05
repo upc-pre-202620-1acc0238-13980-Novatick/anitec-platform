@@ -59,6 +59,17 @@ class PasswordRecoveryTests {
   List<Delivery> forEmail(String e){return delivered.stream().filter(d->d.email().equals(e)).toList();}
  }
  @TestConfiguration static class Config {
+  @Bean @Primary SecurityEmailDelivery testSecurityDelivery(Mail mail,Queue queue) { return new SecurityEmailDelivery() {
+   public void verification(Account account) {}
+   public void passwordRecovery(UUID account,UUID emission,String recipient,String code,java.time.Instant expires) {
+    org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+     new org.springframework.transaction.support.TransactionSynchronization() { public void afterCommit() {
+      try { queue.submit(()-> { try {mail.sendPasswordRecovery(emission,recipient,"ANITEC - Restablecer contraseña",code);} catch(Exception ignored) {} }); }
+      catch(Exception ignored) { /* Delivery failure is not an emission rollback in this isolated double. */ }
+     }});
+   }
+  }; }
+
   @Bean @Primary Time recoveryTime(){return new Time();}
   @Bean @Primary Queue recoveryQueue(){return new Queue();}
   @Bean @Primary Mail recoveryMail(){return new Mail();}
@@ -115,7 +126,7 @@ class PasswordRecoveryTests {
  @Test void twoConfirmationsCannotBothSucceed()throws Exception{String e=active();String c=issue(e);var statuses=concurrent(()->confirm(e,c,"Updated-Password2!").getStatusCode().value(),()->confirm(e,c,"Another-Password3!").getStatusCode().value());assertThat(statuses).containsExactlyInAnyOrder(204,400);assertThat(state(e).consumedAt()).isNotNull();}
  @Test void concurrentWrongAttemptsCannotExceedOrBypassLimit()throws Exception{String e=active();String c=issue(e);for(int n=0;n<3;n++)concurrent(()->confirm(e,wrong(c),"Updated-Password2!").getStatusCode().value(),()->confirm(e,wrong(c),"Updated-Password2!").getStatusCode().value());assertThat(state(e).failedAttempts()).isEqualTo(5);invalid(confirm(e,c,"Updated-Password2!"));}
  @Test void refreshConcurrentWithResetCannotKeepOldSessionActive()throws Exception{String e=active();var session=login(e);String c=issue(e);var results=concurrent(()->confirm(e,c,"Updated-Password2!").getStatusCode().value(),()->refresh(session.refreshToken()));assertThat(results.get(0)).isEqualTo(204);assertThat(results.get(1)).isIn(200,401);assertThat(access(session.accessToken())).isEqualTo(401);assertThat(refresh(session.refreshToken())).isEqualTo(401);}
- @Test void concurrentEmissionRequestsRegisterOnlyOneIssuance()throws Exception{String e=active();concurrent(()->requestOnly(e).getStatusCode().value(),()->requestOnly(e).getStatusCode().value());Runnable a=queue.jobs.poll(),b=queue.jobs.poll();assertThat(a).isNotNull();assertThat(b).isNotNull();concurrent(()->{a.run();return true;},()->{b.run();return true;});assertThat(state(e).emissions()).isEqualTo(1);assertThat(mail.forEmail(e).size()).isEqualTo(1);}
+ @Test void concurrentEmissionRequestsRegisterOnlyOneIssuance()throws Exception{String e=active();concurrent(()->requestOnly(e).getStatusCode().value(),()->requestOnly(e).getStatusCode().value());Runnable a=queue.jobs.poll(),b=queue.jobs.poll();assertThat(a).isNotNull();assertThat(b).isNotNull();concurrent(()->{a.run();return true;},()->{b.run();return true;});queue.drain();assertThat(state(e).emissions()).isEqualTo(1);assertThat(mail.forEmail(e).size()).isEqualTo(1);}
  @Test void rollbackRestoresPasswordCodeAndSessions(){String e=active();var session=login(e);String c=issue(e);String before=accounts.findByEmail(e).orElseThrow().getPasswordHash();doAnswer(call->{call.callRealMethod();throw new IllegalStateException("synthetic failure after password flush");}).when(accountAdapter).save(any(Account.class));try{assertThat(confirm(e,c,"Updated-Password2!").getStatusCode().value()).isEqualTo(500);}finally{reset(accountAdapter);}assertThat(accounts.findByEmail(e).orElseThrow().getPasswordHash().equals(before)).isTrue();assertThat(state(e).consumedAt()).isNull();assertThat(state(e).verifier()).isNotNull();assertThat(access(session.accessToken())).isEqualTo(200);assertThat(confirm(e,c,"Updated-Password2!").getStatusCode().value()).isEqualTo(204);}
  @Test void rolledBackIssuanceNeverSendsMail(){String e=active();doAnswer(call->{call.callRealMethod();throw new IllegalStateException("synthetic issuance failure");}).when(recoveries).save(any());try{assertThat(request(e).getStatusCode().value()).isEqualTo(202);}finally{reset(recoveries);}assertThat(mail.forEmail(e)).isEmpty();assertThat(recoveries.find(id(e))).isEmpty();}
  @Test void providerFailureDoesNotClaimSentOrRefundLogicalEmission(){String e=active();mail.accept=false;var r=request(e);assertThat(r.getStatusCode().value()).isEqualTo(202);assertThat(r.getBody().has("data")).isFalse();assertThat(r.getBody().toString().contains("SENT")).isFalse();assertThat(state(e).emissions()).isEqualTo(1);request(e);assertThat(mail.forEmail(e).size()).isEqualTo(1);}
