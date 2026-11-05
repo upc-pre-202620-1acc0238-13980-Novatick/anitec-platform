@@ -14,4 +14,11 @@ public interface EmailSender {
      * "SENT"); false when delivery cannot be confirmed ("UNCONFIRMED").
      */
     boolean send(String to, String subject, String body);
+    /** Readiness is opt-in; console/unconfigured adapters cannot enable password recovery. */
+    default boolean passwordRecoveryConfigured() { return false; }
+
+    /** One call per committed logical issuance; identifier is available for future provider idempotency. */
+    default boolean sendPasswordRecovery(java.util.UUID emissionId, String to, String subject, String body) {
+        return send(to, subject, body);
+    }
 }

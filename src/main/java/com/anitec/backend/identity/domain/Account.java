@@ -78,6 +78,14 @@ public class Account {
         }
     }
 
+    /** Only called after recovery proof; persistence triggers revoke all sessions atomically. */
+    public void resetPasswordHash(String encoded, Instant now) {
+        if (!canSignIn() || encoded == null || encoded.isBlank())
+            throw DomainException.badRequest("RECOVERY_CODE_INVALID", "No se pudo completar la recuperación");
+        passwordHash = encoded;
+        updatedAt = now;
+    }
+
     public static Account create(String email, String passwordHash, String name, String lastName,
                                  Role role, Instant now) {
         Account account = new Account();

@@ -38,6 +38,13 @@ public class ResendEmailSender implements EmailSender {
     }
 
     @Override
+    public boolean passwordRecoveryConfigured() {
+        // Local readiness only: provider credentials/domain still require real integration validation before enabling.
+        return apiKey != null && !apiKey.isBlank() && from != null
+                && from.trim().matches("(?i)(?:[a-z0-9._%+-]+@notifications\\.vitalwatch\\.space|[^<>]*<[a-z0-9._%+-]+@notifications\\.vitalwatch\\.space>)");
+    }
+
+    @Override
     public boolean send(String to, String subject, String body) {
         if (apiKey == null || apiKey.isBlank()) {
             if (production) {
