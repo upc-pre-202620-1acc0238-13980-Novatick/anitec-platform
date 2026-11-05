@@ -44,21 +44,22 @@ class ProductionSecurityIntegrationTests {
                 "--spring.datasource.password=" + postgres.getPassword(),
                 "--jwt.secret=" + UUID.randomUUID() + UUID.randomUUID(),
                 "--spring.flyway.placeholders.demo_seed=false", "--payments.simulation-enabled=false",
-                "--resend.api-key=")) {
+                "--resend.api-key=", "--identity.sessions.recovery-key=" + java.util.Base64.getEncoder().encodeToString(randomKey()))) {
             assertThat(context.getBean(PaymentGateway.class)).isInstanceOf(UnavailablePaymentGateway.class);
             var jdbc = context.getBean(JdbcTemplate.class);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM identity_accounts", Integer.class)).isEqualTo(0);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class))
-                    .isEqualTo(14);
+                    .isEqualTo(15);
 
             var identity = context.getBean(IdentityService.class);
             String email = "production-probe@example.invalid";
+            String password = "Probe-" + UUID.randomUUID() + "aA1!";
             var created = identity.register(new IdentityService.RegisterCommand("Test", "Probe", email,
-                    "Probe-" + UUID.randomUUID() + "aA1!", Role.GANADERO));
+                    password, Role.GANADERO));
             assertThat(created.emailDelivery()).isEqualTo("UNCONFIRMED");
             var account = context.getBean(AccountRepository.class).findByEmail(email).orElseThrow();
             identity.verifyEmail(email, account.getVerificationCode());
-            String token = context.getBean(JwtService.class).createAccessToken(account.getId(), email, Role.GANADERO);
+            String token = identity.login(email, password).accessToken();
             var subscriptions = context.getBean(SubscriptionService.class);
             var before = subscriptions.mySubscription(account.getId());
             UUID premiumId = subscriptions.plansFor(Role.GANADERO).stream()
@@ -89,4 +90,5 @@ class ProductionSecurityIntegrationTests {
                     .isZero();
         }
     }
+    private static byte[] randomKey() { byte[] key=new byte[32];new java.security.SecureRandom().nextBytes(key);return key; }
 }

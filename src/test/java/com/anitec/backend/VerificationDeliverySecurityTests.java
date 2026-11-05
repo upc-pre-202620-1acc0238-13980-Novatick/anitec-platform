@@ -22,7 +22,7 @@ class VerificationDeliverySecurityTests {
         when(passwords.encode(anyString())).thenReturn("synthetic-hash");
         when(accounts.save(any(Account.class))).thenAnswer(call->call.getArgument(0));
         when(sender.send(anyString(),anyString(),anyString())).thenThrow(new IllegalStateException("sensitive-provider-payload"));
-        var service=new IdentityService(accounts,mock(RefreshTokenRepository.class),passwords,sender,mock(JwtService.class),events);
+        var service=new IdentityService(accounts,passwords,sender,events,mock(com.anitec.backend.identity.application.SessionService.class));
         Logger logger=(Logger) LoggerFactory.getLogger(IdentityService.class);var appender=new ListAppender<ILoggingEvent>();
         appender.start();logger.addAppender(appender);
         try {

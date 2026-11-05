@@ -23,6 +23,14 @@ class DevelopmentSecurityIntegrationTests {
     @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
+    @org.springframework.test.context.DynamicPropertySource
+    static void sessionKey(org.springframework.test.context.DynamicPropertyRegistry registry) {
+        byte[] key = new byte[32];
+        new java.security.SecureRandom().nextBytes(key);
+        String encoded = java.util.Base64.getEncoder().encodeToString(key);
+        registry.add("identity.sessions.recovery-key", () -> encoded);
+    }
+
     @Autowired
     TestRestTemplate http;
     @Autowired
