@@ -71,8 +71,10 @@ public class AuthController {
     public record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {
     }
 
-    public record RefreshRequest(@NotBlank String refreshToken) {
+    public record RefreshRequest(@NotBlank @Size(max = 512) String refreshToken, @NotNull java.util.UUID operationId) {
     }
+
+    public record LogoutRequest(@NotBlank @Size(max = 512) String refreshToken) {}
 
     // ------------------------------------------------------------- endpoints
 
@@ -136,15 +138,16 @@ public class AuthController {
     }
 
     @PostMapping("/refresh-token")
-    @Operation(summary = "Rotar el refresh token y obtener un nuevo access token")
+    @Operation(summary = "Rotar el refresh token y obtener un nuevo access token",
+            description = "Requiere operationId UUID v4. Reintentar con el mismo refresh y operationId recupera el resultado durante 60 segundos; no crea otra pareja ni extiende vencimientos.")
     public ResponseEntity<ApiResponse<IdentityService.TokenPair>> refresh(
             @Valid @RequestBody RefreshRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Token renovado", identityService.refresh(request.refreshToken())));
+        return ResponseEntity.ok(ApiResponse.ok("Token renovado", identityService.refresh(request.refreshToken(), request.operationId())));
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "Cerrar sesión revocando el refresh token en el servidor")
-    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshRequest request) {
+    @Operation(summary = "Cerrar únicamente la sesión acreditada y todos sus tokens")
+    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody LogoutRequest request) {
         identityService.logout(request.refreshToken());
         return ResponseEntity.ok(ApiResponse.ok("Sesión cerrada"));
     }

@@ -3,12 +3,9 @@ package com.anitec.backend.identity.application;
 import com.anitec.backend.identity.domain.Account;
 import com.anitec.backend.identity.domain.AccountRepository;
 import com.anitec.backend.identity.domain.EmailSender;
-import com.anitec.backend.identity.domain.RefreshToken;
-import com.anitec.backend.identity.domain.RefreshTokenRepository;
 import com.anitec.backend.shared.application.DomainEventDispatcher;
 import com.anitec.backend.shared.domain.DomainException;
 import com.anitec.backend.shared.domain.Role;
-import com.anitec.backend.shared.infrastructure.security.JwtService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,25 +27,21 @@ public class IdentityService {
     private static final Logger log = LoggerFactory.getLogger(IdentityService.class);
 
     private final AccountRepository accounts;
-    private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoderPort passwordEncoder;
     private final EmailSender emailSender;
-    private final JwtService jwtService;
     private final DomainEventDispatcher events;
     private final String unavailableCredentialHash;
+    private final SessionService sessions;
 
     public IdentityService(AccountRepository accounts,
-                           RefreshTokenRepository refreshTokens,
                            PasswordEncoderPort passwordEncoder,
                            EmailSender emailSender,
-                           JwtService jwtService,
-                           DomainEventDispatcher events) {
+                           DomainEventDispatcher events, SessionService sessions) {
         this.accounts = accounts;
-        this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.emailSender = emailSender;
-        this.jwtService = jwtService;
         this.events = events;
+        this.sessions = sessions;
         this.unavailableCredentialHash = passwordEncoder.encode("unavailable-verification-context");
     }
 
@@ -151,50 +144,25 @@ public class IdentityService {
 
     @Transactional
     public LoginResult login(String email, String password) {
-        Account account = accounts.findByEmail(Account.normalizeEmail(email))
+        Account account = accounts.findByEmailForUpdate(Account.normalizeEmail(email))
                 .orElseThrow(() -> DomainException.unauthorized("INVALID_CREDENTIALS", "Correo o contraseña incorrectos"));
-        if (!passwordEncoder.matches(password, account.getPasswordHash())) {
+        if (!passwordEncoder.matches(password, account.getPasswordHash()))
             throw DomainException.unauthorized("INVALID_CREDENTIALS", "Correo o contraseña incorrectos");
-        }
-        if (account.getStatus() == Account.Status.SUSPENDIDA) {
+        if (account.getStatus() == Account.Status.SUSPENDIDA)
             throw DomainException.unauthorized("ACCOUNT_SUSPENDED", "La cuenta está suspendida");
-        }
-        if (!account.canSignIn()) {
+        if (!account.canSignIn())
             throw DomainException.unauthorized("EMAIL_NOT_VERIFIED", "Debe verificar su correo electrónico antes de iniciar sesión");
-        }
-        TokenPair pair = issueTokens(account);
-        return new LoginResult(account.getId(), account.getEmail(), account.getRole(),
-                pair.accessToken(), pair.refreshToken(), pair.expiresIn());
+        TokenPair pair = sessions.create(account);
+        return new LoginResult(account.getId(), account.getEmail(), account.getRole(), pair.accessToken(), pair.refreshToken(), pair.expiresIn());
     }
 
-    @Transactional
-    public TokenPair refresh(String rawRefreshToken) {
-        RefreshToken token = refreshTokens.findByDigest(RefreshToken.digest(rawRefreshToken))
-                .orElseThrow(() -> DomainException.unauthorized("INVALID_CREDENTIALS", "Refresh token inválido"));
-        if (!token.isValidAt(Instant.now())) {
-            throw DomainException.unauthorized("INVALID_CREDENTIALS", "Sesión expirada; inicie sesión nuevamente");
-        }
-        Account account = accounts.findById(token.getAccountId())
-                .orElseThrow(() -> DomainException.unauthorized("INVALID_CREDENTIALS", "Sesión inválida"));
-        if (!account.canSignIn()) {
-            throw DomainException.unauthorized("INVALID_CREDENTIALS", "La cuenta no tiene acceso activo");
-        }
-        token.revoke(Instant.now());           // rotation: old token is invalidated
-        refreshTokens.save(token);
-        return issueTokens(account);
-    }
-
-    @Transactional
-    public void logout(String rawRefreshToken) {
-        refreshTokens.findByDigest(RefreshToken.digest(rawRefreshToken)).ifPresent(token -> {
-            token.revoke(Instant.now());
-            refreshTokens.save(token);
-        });
-    }
+    public TokenPair refresh(String rawRefreshToken, UUID operationId) { return sessions.refresh(rawRefreshToken, operationId); }
+    public void logout(String rawRefreshToken) { sessions.logout(rawRefreshToken); }
 
     @Transactional
     public Account updateProfile(UUID accountId, ProfileUpdate update) {
-        Account account = requireAccount(accountId);
+        Account account = accounts.findByIdForUpdate(accountId)
+                .orElseThrow(() -> DomainException.notFound("Cuenta no encontrada"));
         account.updateProfile(update.name(), update.lastName(), update.photoUrl(),
                 update.address(), update.dni(), update.phone(), Instant.now());
         return accounts.save(account);
@@ -208,14 +176,6 @@ public class IdentityService {
     }
 
     // ------------------------------------------------------------- helpers
-
-    private TokenPair issueTokens(Account account) {
-        Instant now = Instant.now();
-        String access = jwtService.createAccessToken(account.getId(), account.getEmail(), account.getRole());
-        String rawRefresh = RefreshToken.newRawToken();
-        refreshTokens.save(RefreshToken.issue(account.getId(), rawRefresh, now, jwtService.refreshExpirationMs()));
-        return new TokenPair(access, rawRefresh, jwtService.accessTokenTtlSeconds());
-    }
 
     private boolean sendVerificationEmail(Account account) {
         String body = "Hola " + account.getName() + ",\n\n"

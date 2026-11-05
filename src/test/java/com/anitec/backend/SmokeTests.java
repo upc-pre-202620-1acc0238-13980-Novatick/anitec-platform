@@ -303,16 +303,16 @@ class SmokeTests {
         assertThat(me.data().path("emailVerified").asBoolean()).isTrue();
 
         // refresh rotates the token; the old one stops working
-        Res refreshed = post("/api/v1/auth/refresh-token", Map.of("refreshToken", refresh1), null);
+        Res refreshed = post("/api/v1/auth/refresh-token", Map.of("refreshToken", refresh1, "operationId", UUID.randomUUID()), null);
         assertThat(refreshed.status()).isEqualTo(200);
         String refresh2 = refreshed.data().path("refreshToken").asText();
-        Res replay = post("/api/v1/auth/refresh-token", Map.of("refreshToken", refresh1), null);
+        Res replay = post("/api/v1/auth/refresh-token", Map.of("refreshToken", refresh1, "operationId", UUID.randomUUID()), null);
         assertThat(replay.status()).isEqualTo(401);
 
         // logout revokes server side
         Res logout = post("/api/v1/auth/logout", Map.of("refreshToken", refresh2), null);
         assertThat(logout.status()).isEqualTo(200);
-        Res afterLogout = post("/api/v1/auth/refresh-token", Map.of("refreshToken", refresh2), null);
+        Res afterLogout = post("/api/v1/auth/refresh-token", Map.of("refreshToken", refresh2, "operationId", UUID.randomUUID()), null);
         assertThat(afterLogout.status()).isEqualTo(401);
 
         // unauthenticated request -> 401 envelope

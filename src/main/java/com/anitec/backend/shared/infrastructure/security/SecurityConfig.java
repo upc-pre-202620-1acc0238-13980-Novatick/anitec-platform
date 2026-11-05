@@ -69,7 +69,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) ->
-                                writeError(response, 401, "No autenticado o sesión expirada", "INVALID_CREDENTIALS"))
+                                writeError(response, 401, "No autenticado o sesión expirada",
+                                        request.getAttribute("authenticationErrorCode") instanceof String code ? code : "INVALID_CREDENTIALS"))
                         .accessDeniedHandler((request, response, accessDeniedException) ->
                                 writeError(response, 403, "No tiene permisos para realizar esta operación", "FORBIDDEN")))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

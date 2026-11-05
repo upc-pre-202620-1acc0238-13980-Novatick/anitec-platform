@@ -23,6 +23,7 @@ public class JwtService {
 
     private static final String ROLE_CLAIM = "role";
 
+    private final java.time.Clock clock;
     private final SecretKey key;
     private final long expirationMs;
     private final long refreshExpirationMs;
@@ -30,17 +31,19 @@ public class JwtService {
     public JwtService(
             @Value("${jwt.secret}") String secret,
             @Value("${jwt.expiration-ms:86400000}") long expirationMs,
-            @Value("${jwt.refresh-expiration-ms:604800000}") long refreshExpirationMs) {
+            @Value("${jwt.refresh-expiration-ms:604800000}") long refreshExpirationMs, java.time.Clock clock) {
+        this.clock = clock;
         if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new IllegalStateException("jwt.secret must be at least 256 bits (32 bytes)");
         }
+        if (expirationMs <= 0 || refreshExpirationMs <= 0) throw new IllegalStateException("Token lifetimes must be positive");
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMs = expirationMs;
         this.refreshExpirationMs = refreshExpirationMs;
     }
 
     public String createAccessToken(UUID accountId, String email, Role role) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         return Jwts.builder()
                 .subject(accountId.toString())
                 .claim("email", email)
@@ -51,12 +54,25 @@ public class JwtService {
                 .compact();
     }
 
+    public String createAccessToken(UUID accountId, String email, Role role, UUID sessionId, Instant now, Instant sessionExpiry) {
+        Instant expires = now.plusMillis(expirationMs);
+        if (expires.isAfter(sessionExpiry)) expires = sessionExpiry;
+        return Jwts.builder().id(UUID.randomUUID().toString()).subject(accountId.toString())
+                .claim("email", email).claim(ROLE_CLAIM, role.name()).claim("sid", sessionId.toString())
+                .issuedAt(Date.from(now)).expiration(Date.from(expires)).signWith(key).compact();
+    }
+
     /** Parses and validates the token; throws 401 on any problem. */
     public Claims parse(String token) {
         try {
-            return Jwts.parser().verifyWith(key).build()
+            Claims claims = Jwts.parser().verifyWith(key).clock(() -> Date.from(clock.instant())).build()
                     .parseSignedClaims(token)
                     .getPayload();
+            if (claims.getExpiration() == null || !clock.instant().isBefore(claims.getExpiration().toInstant()))
+                throw new io.jsonwebtoken.ExpiredJwtException(null, claims, "Expired access token");
+            return claims;
+        } catch (io.jsonwebtoken.ExpiredJwtException ex) {
+            throw DomainException.unauthorized("ACCESS_TOKEN_EXPIRED", "Token de acceso expirado");
         } catch (Exception ex) {
             throw DomainException.unauthorized("INVALID_CREDENTIALS", "Token de acceso inválido o expirado");
         }

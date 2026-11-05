@@ -34,6 +34,11 @@ public class AccountRepositoryImpl implements AccountRepository {
     }
 
     @Override
+    public Optional<Account> findByIdForUpdate(UUID accountId) {
+        return jpa.findByIdForUpdate(accountId).map(AccountJpaEntity::toDomain);
+    }
+
+    @Override
     public Optional<Account> findByEmail(String email) {
         return jpa.findByEmail(email).map(AccountJpaEntity::toDomain);
     }

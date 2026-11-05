@@ -18,6 +18,10 @@ public interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, UU
     @Query("select a from AccountJpaEntity a where a.email = :email")
     Optional<AccountJpaEntity> findByEmailForUpdate(@Param("email") String email);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from AccountJpaEntity a where a.id = :id")
+    Optional<AccountJpaEntity> findByIdForUpdate(@Param("id") UUID id);
+
     boolean existsByEmail(String email);
 
 

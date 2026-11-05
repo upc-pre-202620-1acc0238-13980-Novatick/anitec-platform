@@ -17,6 +17,8 @@ public interface AccountRepository {
 
     Optional<Account> findById(UUID accountId);
 
+    Optional<Account> findByIdForUpdate(UUID accountId);
+
     Optional<Account> findByEmail(String email);
 
     /** Serialize verification and resend commands for the same account within a transaction. */

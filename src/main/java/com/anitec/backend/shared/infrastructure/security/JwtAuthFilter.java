@@ -15,24 +15,25 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
-import com.anitec.backend.identity.domain.AccountRepository;
 import com.anitec.backend.shared.domain.Role;
 
 /**
  * Extracts {@code Authorization: Bearer <jwt>}, validates the signature and
  * populates the SecurityContext with ROLE_* authorities (spec section 10.1).
- * Invalid/missing tokens simply leave the request unauthenticated, so the
- * entry point answers with the standard 401 envelope.
+ * Every protected request validates the persistent session and current account.
+ * Invalid credentials produce 401; unavailable state validation fails closed with 503.
  */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final AccountRepository accounts;
+    private final com.anitec.backend.identity.application.SessionService sessions;
+    private final com.fasterxml.jackson.databind.ObjectMapper json;
 
-    public JwtAuthFilter(JwtService jwtService, AccountRepository accounts) {
+    public JwtAuthFilter(JwtService jwtService, com.anitec.backend.identity.application.SessionService sessions, com.fasterxml.jackson.databind.ObjectMapper json) {
         this.jwtService = jwtService;
-        this.accounts = accounts;
+        this.sessions = sessions;
+        this.json = json;
     }
 
     @Override
@@ -46,11 +47,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String token = header.substring(7).trim();
             try {
                 Claims claims = jwtService.parse(token);
+                if (claims.getSubject() == null || claims.get("role", String.class) == null)
+                    throw new IllegalArgumentException("Missing identity claims");
                 UUID accountId = UUID.fromString(claims.getSubject());
                 Role role = Role.valueOf(claims.get("role", String.class));
-                var account = accounts.findById(accountId).orElseThrow();
-                if (!account.canSignIn() || account.getRole() != role) {
-                    throw new IllegalArgumentException("Account is not authorized for this token");
+                String sid = claims.get("sid", String.class);
+                if (sid == null || !sessions.authorized(UUID.fromString(sid), accountId, role)) {
+                    throw com.anitec.backend.shared.domain.DomainException.unauthorized("SESSION_INVALID", "Sesión inválida");
                 }
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
@@ -58,8 +61,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         List.of(new SimpleGrantedAuthority("ROLE_" + role.name())));
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (Exception ignored) {
-                // Leave unauthenticated: the security entry point replies 401 with the envelope.
+            } catch (com.anitec.backend.shared.domain.DomainException failure) {
+                request.setAttribute("authenticationErrorCode", failure.errorCode());
+            } catch (IllegalArgumentException | io.jsonwebtoken.JwtException failure) {
+                request.setAttribute("authenticationErrorCode", "INVALID_CREDENTIALS");
+            } catch (Exception unavailable) {
+                response.setStatus(503);
+                response.setContentType("application/json");
+                json.writeValue(response.getOutputStream(), com.anitec.backend.shared.interfaceapi.ApiResponse.error(
+                        "No se pudo comprobar la sesión", "AUTHENTICATION_UNAVAILABLE", null));
+                return;
             }
         }
         filterChain.doFilter(request, response);

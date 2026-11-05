@@ -217,8 +217,8 @@ class IdentityVerificationTests {
     }
 
     @Test
-    void characterizeLogoutRevokesRefreshButDoesNotImmediatelyInvalidateAccess() throws Exception {
-        // Characterizes current behavior for a product decision; does not prescribe future logout policy.
+    void logoutRevokesRefreshAndImmediatelyInvalidatesAccess() throws Exception {
+        // Regression for the approved immediate session logout policy.
         String email = register();
         assertThat(verify(email, code(email)).getStatusCode().value()).isEqualTo(200);
         var login = http.postForEntity("/api/v1/auth/login", Map.of("email", email, "password", passwords.get(email)), JsonNode.class);
@@ -230,7 +230,7 @@ class IdentityVerificationTests {
         var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create(http.getRootUri() + "/api/v1/auth/refresh-token"))
                 .header("Content-Type", "application/json")
                 .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
-                        new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(Map.of("refreshToken", refresh))))
+                        new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(Map.of("refreshToken", refresh, "operationId", UUID.randomUUID()))))
                 .build();
         var after = java.net.http.HttpClient.newHttpClient().send(request, java.net.http.HttpResponse.BodyHandlers.discarding());
         assertThat(after.statusCode()).isEqualTo(401);
@@ -238,7 +238,7 @@ class IdentityVerificationTests {
         headers.setBearerAuth(access);
         var profile = http.exchange("/api/v1/account/me", org.springframework.http.HttpMethod.GET,
                 new org.springframework.http.HttpEntity<>(headers), JsonNode.class);
-        assertThat(profile.getStatusCode().value()).isEqualTo(200);
+        assertThat(profile.getStatusCode().value()).isEqualTo(401);
     }
 
     @Test
