@@ -30,6 +30,17 @@ class PasswordRecoveryRestartTests {
   public boolean sendPasswordRecovery(UUID id,String to,String subject,String body){var matcher=java.util.regex.Pattern.compile("[0-9]{6}").matcher(body);if(!matcher.find())throw new IllegalStateException("Missing test code");codes.put(to,matcher.group());return true;}
  }
  @TestConfiguration static class Config {
+  @Bean @Primary SecurityEmailDelivery testSecurityDelivery(Mail mail,Work queue) { return new SecurityEmailDelivery() {
+   public void verification(Account account) {}
+   public void passwordRecovery(UUID account,UUID emission,String recipient,String code,java.time.Instant expires) {
+    org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+     new org.springframework.transaction.support.TransactionSynchronization() { public void afterCommit() {
+      try { queue.submit(()-> { try {mail.sendPasswordRecovery(emission,recipient,"ANITEC - Restablecer contraseña",code);} catch(Exception ignored) {} }); }
+      catch(Exception ignored) { /* Delivery failure is not an emission rollback in this isolated double. */ }
+     }});
+   }
+  }; }
+
   @Bean @Primary Clock recoveryRestartClock(){return Clock.fixed(Instant.parse("2035-01-01T00:00:00Z"),ZoneOffset.UTC);}
   @Bean @Primary Work restartWork(){return new Work();}
   @Bean @Primary Mail restartMail(){return new Mail();}

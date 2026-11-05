@@ -61,3 +61,15 @@ springdoc:
     operations-sorter: method
   api-docs:
     path: /v3/api-docs
+
+# Disabled by default. Enabling validates every required provider/crypto setting, regardless of profiles.
+email:
+  delivery:
+    mode: ${EMAIL_DELIVERY_MODE:disabled}
+    encryption-key: ${EMAIL_OUTBOX_ENCRYPTION_KEY:}
+    connect-timeout-ms: ${EMAIL_CONNECT_TIMEOUT_MS:3000}
+    response-timeout-ms: ${EMAIL_RESPONSE_TIMEOUT_MS:10000}
+    lease-seconds: ${EMAIL_CLAIM_LEASE_SECONDS:60}
+    max-attempts: ${EMAIL_MAX_ATTEMPTS:5}
+    poll-ms: ${EMAIL_POLL_MS:1000}
+    batch-size: ${EMAIL_BATCH_SIZE:10}
