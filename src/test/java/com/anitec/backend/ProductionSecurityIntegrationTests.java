@@ -49,7 +49,7 @@ class ProductionSecurityIntegrationTests {
             var jdbc = context.getBean(JdbcTemplate.class);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM identity_accounts", Integer.class)).isEqualTo(0);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class))
-                    .isEqualTo(15);
+                    .isEqualTo(16);
 
             var identity = context.getBean(IdentityService.class);
             String email = "production-probe@example.invalid";
