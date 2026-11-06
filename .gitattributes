@@ -1,0 +1,8 @@
+# Preserve upstream bytes: vendor checksums must match on Windows and Linux.
+docs/api/site/vendor/swagger-ui-bundle.js -text
+docs/api/site/vendor/swagger-ui.css -text
+docs/api/site/vendor/LICENSE -text
+# Stable candidate artifact hashes across checkouts.
+docs/api/openapi.yaml text eol=lf
+docs/api/site/openapi-public.json text eol=lf
+docs/api/site/vendor/checksums.json text eol=lf

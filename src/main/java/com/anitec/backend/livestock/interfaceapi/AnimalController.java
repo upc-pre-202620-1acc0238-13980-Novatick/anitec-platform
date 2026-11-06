@@ -90,6 +90,7 @@ public class AnimalController {
             String photoUrl) {
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AnimalStatusRequest")
     public record StatusRequest(@NotNull(message = "obligatorio") Animal.Status status) {
     }
 

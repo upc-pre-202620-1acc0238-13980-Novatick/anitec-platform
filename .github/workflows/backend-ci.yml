@@ -47,6 +47,9 @@ jobs:
       - name: Run all backend tests with Testcontainers
         run: ./mvnw -B test
 
+      - name: Verify read-only static Swagger in an isolated browser
+        run: node --experimental-websocket scripts/check-static-docs.mjs
+
       # Publish counts only: raw XML/logs can contain sensitive test payloads.
       - name: Summarize Surefire results
         if: ${{ !cancelled() }}
