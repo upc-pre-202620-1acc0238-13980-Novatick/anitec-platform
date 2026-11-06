@@ -3,6 +3,8 @@ package com.anitec.backend.notification.application;
 import com.anitec.backend.care.domain.CareRecord;
 import com.anitec.backend.care.domain.VeterinaryAppointment;
 import com.anitec.backend.linking.domain.LinkingInvitation;
+import com.anitec.backend.identity.application.IdentityQueries;
+import com.anitec.backend.livestock.application.LivestockQueries;
 import com.anitec.backend.notification.domain.Notification;
 import com.anitec.backend.notification.domain.NotificationRepository;
 import com.anitec.backend.notification.domain.PushNotificationPort;
@@ -14,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,10 +33,18 @@ public class NotificationService {
 
     private final NotificationRepository notifications;
     private final PushNotificationPort pushPort;
+    private final LivestockQueries livestockQueries;
+    private final IdentityQueries identityQueries;
+    private static final ZoneId VISIT_ZONE = ZoneId.of("America/Lima");
+    private static final DateTimeFormatter VISIT_TIME = DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm")
+            .withZone(VISIT_ZONE);
 
-    public NotificationService(NotificationRepository notifications, PushNotificationPort pushPort) {
+    public NotificationService(NotificationRepository notifications, PushNotificationPort pushPort,
+                               LivestockQueries livestockQueries, IdentityQueries identityQueries) {
         this.notifications = notifications;
         this.pushPort = pushPort;
+        this.livestockQueries = livestockQueries;
+        this.identityQueries = identityQueries;
     }
 
     public record NotificationView(UUID id, String type, String title, String message,
@@ -93,10 +105,23 @@ public class NotificationService {
     @EventListener
     @Transactional
     public void onVisitScheduled(VeterinaryAppointment.VisitScheduled event) {
+        var animal = livestockQueries.requireAnimalInScope(event.animalId(), List.of(event.ownerId()));
+        var farm = livestockQueries.requireFarmInScope(animal.getFarmId(), List.of(event.ownerId()));
+        String animalLabel = animal.getName() == null || animal.getName().isBlank()
+                ? animal.codeValue() : animal.getName() + " (" + animal.codeValue() + ")";
+        String veterinarian = identityQueries.displayNames(List.of(event.veterinarianId()))
+                .getOrDefault(event.veterinarianId(), "Veterinario");
+        String location = farm.getLocation() == null || farm.getLocation().isBlank()
+                ? "Ubicación no registrada" : farm.getLocation();
+        boolean control = event.type() == VeterinaryAppointment.Type.CONTROL;
         notifyUser(event.ownerId(), Notification.Type.VISIT_SCHEDULED,
-                "Visita veterinaria programada",
-                "Se programó una " + event.type().name().toLowerCase()
-                        + " para uno de sus animales. Consulte su agenda en la aplicación.");
+                control ? "Control veterinario programado" : "Visita veterinaria programada",
+                "Se programó " + (control ? "un control" : "una visita") + " para " + animalLabel
+                        + " con " + veterinarian + " el " + VISIT_TIME.format(event.scheduledAt())
+                        + " (" + VISIT_ZONE.getId() + "). Finca: " + farm.getName()
+                        + ". Ubicación: " + location + ".",
+                // Keep animal/farm/location snapshots out of the console/future push channel.
+                "Hay un nuevo aviso de visita o control en su bandeja de notificaciones.");
     }
 
     @EventListener
@@ -136,11 +161,15 @@ public class NotificationService {
     // -------------------------------------------------------------- helpers
 
     private void notifyUser(UUID userId, Notification.Type type, String title, String message) {
+        notifyUser(userId, type, title, message, message);
+    }
+
+    private void notifyUser(UUID userId, Notification.Type type, String title, String message, String pushMessage) {
         Notification notification = Notification.create(userId, type, title, message, Instant.now());
         notifications.save(notification);
         try {
             // No clinical content in the push payload (report rule).
-            pushPort.send(userId, title, message);
+            pushPort.send(userId, title, pushMessage);
         } catch (Exception ex) {
             log.warn("Push delivery failed for user {}: {}", userId, ex.getMessage());
         }

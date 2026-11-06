@@ -108,7 +108,8 @@ public class AnimalController {
             UUID id, String code, String name, String species, String sex, String breed,
             LocalDate birthDate, Animal.Status status, UUID farmId, String farmName,
             long observationsCount, List<ObservationResponse> recentObservations,
-            long attentionsCount, List<CareQueries.AttentionSummary> recentAttentions, Long version) {
+            long attentionsCount, List<CareQueries.AttentionSummary> recentAttentions, Long version,
+            UUID speciesId, String photoUrl) {
     }
 
     public record StatusResponse(UUID id, Animal.Status status) {
@@ -193,7 +194,8 @@ public class AnimalController {
                 animal.getFarmId(), livestockQueries.farmName(animal.getFarmId()),
                 animal.getObservations().size(), observations,
                 careQueries.countForAnimal(animal.getId()),
-                careQueries.recentForAnimal(animal.getId(), RECENT_LIMIT), animal.getVersion());
+                careQueries.recentForAnimal(animal.getId(), RECENT_LIMIT), animal.getVersion(),
+                animal.getSpeciesId(), animal.getPhotoUrl());
         return ResponseEntity.ok(ApiResponse.ok(detail));
     }
 

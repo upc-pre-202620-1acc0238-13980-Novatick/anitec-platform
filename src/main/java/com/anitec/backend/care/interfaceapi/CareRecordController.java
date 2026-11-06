@@ -58,8 +58,8 @@ public class CareRecordController {
             @NotBlank(message = "obligatorio") String description,
             @NotNull(message = "obligatorio")
             @PastOrPresent(message = "no puede ser futura") LocalDate attentionDate,
-            List<@Valid TreatmentInput> treatments,
-            List<@Valid VaccinationInput> vaccinations,
+            List<@NotNull(message = "no se permiten elementos nulos") @Valid TreatmentInput> treatments,
+            List<@NotNull(message = "no se permiten elementos nulos") @Valid VaccinationInput> vaccinations,
             String instructions) {
     }
 
