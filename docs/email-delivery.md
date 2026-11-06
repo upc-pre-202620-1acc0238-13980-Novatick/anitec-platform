@@ -51,9 +51,14 @@ Recipient, subject, code and message content are not duplicated in plaintext out
 Existing account email and legacy verification-code storage are not redesigned by V17;
 outbox encryption does not imply encryption of all account data or backups.
 
-Security templates cover verification/recovery in Spanish and English. Existing registration
-and recovery contracts have no language preference: current emissions use Spanish. No account
-schema, endpoint or general i18n contract was added for language selection.
+Security templates cover verification/recovery in Spanish and English. Registration, credential-authorized
+resend and password-recovery requests accept optional `Accept-Language` for the current operation
+(`es`/`en`, regional/weighted preferences supported, Spanish fallback). The selected language is
+captured before asynchronous intake and materialized in the encrypted immutable HTTP payload;
+workers never infer it from a request/thread or reselect it on retry. No account preference or schema
+change is introduced. A later request without the header defaults to Spanish independently of earlier
+emissions. Invitation emails also use the sender's requested language through their existing direct
+transport. See [selection and eligibility contracts](linking-eligibility-email-i18n.md).
 
 ## Outcomes and retries
 

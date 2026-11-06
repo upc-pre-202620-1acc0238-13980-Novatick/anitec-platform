@@ -29,7 +29,7 @@ class VerificationDeliverySecurityTests {
             var result=service.register(new IdentityService.RegisterCommand("Test","Delivery","delivery@example.invalid","Test-Password1!",Role.GANADERO));
             assertThat(result.emailDelivery()).isEqualTo("UNCONFIRMED");
             assertThat(appender.list).isEmpty();
-            verify(sender).verification(any(Account.class));
+            verify(sender).verification(any(Account.class), eq(EmailLanguage.ES));
         } finally {logger.detachAppender(appender);appender.stop();}
     }
 }

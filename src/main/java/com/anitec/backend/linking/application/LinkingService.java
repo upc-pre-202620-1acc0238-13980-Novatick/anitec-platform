@@ -3,6 +3,7 @@ package com.anitec.backend.linking.application;
 import com.anitec.backend.identity.application.IdentityQueries;
 import com.anitec.backend.identity.domain.Account;
 import com.anitec.backend.identity.domain.EmailSender;
+import com.anitec.backend.identity.domain.EmailLanguage;
 import com.anitec.backend.linking.domain.InvitationRepository;
 import com.anitec.backend.linking.domain.LinkingCapacity;
 import com.anitec.backend.linking.domain.LinkingCapacityRepository;
@@ -57,11 +58,16 @@ public class LinkingService {
     /** US14: invite a registered, verified veterinarian by e-mail. */
     @Transactional
     public LinkingInvitation sendInvitation(UUID farmerId, String vetEmail) {
+        return sendInvitation(farmerId, vetEmail, EmailLanguage.ES);
+    }
+
+    @Transactional
+    public LinkingInvitation sendInvitation(UUID farmerId, String vetEmail, EmailLanguage language) {
         String email = Account.normalizeEmail(vetEmail);
         Account vet = identityQueries.findByEmail(email)
-                .filter(account -> account.getRole() == Role.VETERINARIO)
+                .filter(LinkingService::eligibleVeterinarian)
                 .orElseThrow(() -> DomainException.business("RECIPIENT_NOT_REGISTERED",
-                        "El correo no corresponde a un veterinario registrado"));
+                        "No se puede enviar la invitación al destinatario indicado"));
         if (vet.getId().equals(farmerId)) {
             throw DomainException.badRequest("VALIDATION_ERROR", "No puede invitarse a sí mismo");
         }
@@ -80,11 +86,15 @@ public class LinkingService {
         // E-mail failure keeps the invitation pending and reports UNCONFIRMED (US14 scenario 3).
         boolean sent;
         try {
-            sent = emailSender.send(email, "ANITEC - Invitación de vinculación",
-                    "Hola,\n\nEl ganadero le ha invitado a vincularse en ANITEC. "
+            boolean english = language == EmailLanguage.EN;
+            sent = emailSender.send(email,
+                    english ? "ANITEC - Veterinary linking invitation" : "ANITEC - Invitación de vinculación",
+                    english ? "Hello,\n\nA farmer has invited you to link in ANITEC. "
+                            + "Sign in to the app to accept or reject the invitation."
+                            : "Hola,\n\nEl ganadero le ha invitado a vincularse en ANITEC. "
                             + "Inicie sesión en la aplicación para aceptar o rechazar la invitación.");
         } catch (Exception ex) {
-            log.warn("Invitation e-mail could not be sent to {}: {}", email, ex.getMessage());
+            log.warn("Invitation e-mail could not be confirmed");
             sent = false;
         }
         invitation.setEmailDelivery(sent ? "SENT" : "UNCONFIRMED");
@@ -106,6 +116,10 @@ public class LinkingService {
 
         if (action == RespondAction.ACCEPT) {
             invitation.requirePending(now);          // pending + not expired (INVITATION_EXPIRED)
+            // Re-read current eligibility; a previous successful send is not proof at acceptance time.
+            if (!eligibleVeterinarian(identityQueries.getIdentity(veterinarianId))) {
+                throw DomainException.conflict("INVALID_STATE_TRANSITION", "No se puede aceptar esta invitación");
+            }
             if (links.existsActive(invitation.getFarmerId(), veterinarianId)) {
                 throw DomainException.conflict("ALREADY_LINKED", "Ya existe una vinculación activa con este ganadero");
             }
@@ -146,6 +160,10 @@ public class LinkingService {
     }
 
     // ------------------------------------- subscriptions -> capacity limits
+
+    private static boolean eligibleVeterinarian(Account account) {
+        return account.getRole() == Role.VETERINARIO && account.canSignIn();
+    }
 
     @EventListener
     @Transactional

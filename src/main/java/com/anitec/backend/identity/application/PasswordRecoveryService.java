@@ -36,12 +36,16 @@ public class PasswordRecoveryService {
     }
     public void requireAvailable() { verifier.requireAvailable(); }
     public void request(String rawEmail) {
+        request(rawEmail, EmailLanguage.ES);
+    }
+    public void request(String rawEmail, EmailLanguage language) {
         requireAvailable();
         String normalized=Account.normalizeEmail(rawEmail);
-        try { queue.submit(() -> process(normalized)); }
+        EmailLanguage selected=language == null ? EmailLanguage.ES : language;
+        try { queue.submit(() -> process(normalized, selected)); }
         catch (RejectedExecutionException full) { throw DomainException.unavailable("RECOVERY_UNAVAILABLE", "La recuperación no está disponible"); }
     }
-    private void process(String normalized) {
+    private void process(String normalized, EmailLanguage language) {
         try {
             tx.executeWithoutResult(status -> {
                 var found=accounts.findByEmailForUpdate(normalized);
@@ -65,7 +69,7 @@ public class PasswordRecoveryService {
                 if (code==null) throw new IllegalStateException("Recovery code generation unavailable");
                 var issued=PasswordRecovery.issue(account.getId(),previous,id,verifier.sign(account.getId(),id,code),now);
                 recoveries.save(issued);
-                email.passwordRecovery(account.getId(),id,account.getEmail(),code,issued.expiresAt());
+                email.passwordRecovery(account.getId(),id,account.getEmail(),code,issued.expiresAt(),language);
             });
         } catch (Exception failure) {
             // Provider/database exceptions may contain sensitive payloads: never log them or their messages.

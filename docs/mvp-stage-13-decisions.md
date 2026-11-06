@@ -15,17 +15,19 @@ Estas decisiones versionan el alcance aprobado; no sustituyen la trazabilidad fi
 | E | Perfil común actual para ganadero/veterinario. | Sin especialidad, colegiatura o zonas obligatorias; el rol no certifica habilitación profesional. |
 | F | location de finca es texto opcional. | Android muestra «Ubicación no registrada» si falta; no confundir con domicilio del usuario ni agregar UBIGEO/coordenadas. |
 | G | Bandeja in-app forma parte del MVP. | FCM real se pospone; no afirmar entrega push Android por un adaptador de consola. |
-| H | Español e inglés en comunicaciones de correo del alcance aprobado. | Android localiza UI/códigos; backend debe seleccionar es/en, español por defecto, propagando idioma al trabajo asíncrono. No traducir rutas, JSON o logs ni asumir preferencia persistida. Implementación en 13B. |
-| I | Invitar únicamente a veterinarios activos y con correo verificado. | Revalidar al enviar y aceptar sin revelar estados privados innecesariamente. Implementación en 13B. |
+| H | Español e inglés en comunicaciones de correo del alcance aprobado. | Android localiza UI/códigos; backend selecciona es/en por Accept-Language opcional, español por defecto, propagando idioma al trabajo asíncrono. No traducir rutas, JSON o logs ni asumir preferencia persistida. Implementado en 13B. |
+| I | Invitar únicamente a veterinarios activos y con correo verificado. | Revalidar al enviar y aceptar sin revelar estados privados innecesariamente. Implementado en 13B. |
 
 ## División de la etapa
 
 **13A:** DTO individual de animales, avisos informativos, elementos null en complementos clínicos,
 pruebas HTTP de operaciones existentes y este documento. No requiere cambios de esquema.
 
-**13B:** elegibilidad de veterinarios e idioma real de correos. Comenzar solo después de revisar e integrar
-13A. Una migración o cambio arquitectónico que afecte contratos requiere explicación y aprobación previa.
-La ratificación de H/I no significa que 13A ya implemente esos controles.
+**13B:** elegibilidad de veterinarios e idioma real de correos, iniciada después de integrar 13A.
+El Team Leader aprobó explícitamente Accept-Language opcional para registro, reenvío, solicitud de
+recuperación e invitación; en invitaciones decide el emisor, sin preferencias persistidas del destinatario.
+No necesita migración. La ratificación de H/I no significaba que 13A ya implementara esos controles.
+Ver [contratos de 13B](linking-eligibility-email-i18n.md).
 
 **Etapa 14:** ciclo de pagos con Stripe Test Mode, verificación/webhooks/idempotencia y renovación/cancelación
 basadas en cobro acreditado. No mezclar pagos en etapa 13.

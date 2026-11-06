@@ -1,6 +1,7 @@
 package com.anitec.backend.identity.interfaceapi;
 
 import com.anitec.backend.identity.application.PasswordRecoveryService;
+import com.anitec.backend.identity.domain.EmailLanguage;
 import com.anitec.backend.identity.domain.VerificationThrottle;
 import com.anitec.backend.shared.interfaceapi.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,11 +33,12 @@ public class PasswordRecoveryController {
     }
     @PostMapping("/request")
     @Operation(summary="Solicitar recuperación de contraseña",description="202 genérico: aceptación para procesamiento, no entrega. Deshabilitado por defecto.")
-    public ResponseEntity<?> request(@Valid @RequestBody Request body,HttpServletRequest http) {
+    public ResponseEntity<?> request(@Valid @RequestBody Request body,HttpServletRequest http,
+                                    @RequestHeader(value="Accept-Language",required=false) String language) {
         service.requireAvailable();
         try { limiter.check(http.getRemoteAddr(),"request"); }
         catch (VerificationThrottle throttle) { return limited(throttle); }
-        service.request(body.email());
+        service.request(body.email(),EmailLanguage.fromAcceptLanguage(language));
         return ResponseEntity.accepted().body(ApiResponse.ok("Si la cuenta puede recuperarse, recibirás un código en el correo indicado"));
     }
     @PostMapping("/confirm")

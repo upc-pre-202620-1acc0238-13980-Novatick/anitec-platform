@@ -1,6 +1,7 @@
 package com.anitec.backend.identity.interfaceapi;
 
 import com.anitec.backend.identity.application.IdentityService;
+import com.anitec.backend.identity.domain.EmailLanguage;
 import com.anitec.backend.identity.domain.VerificationThrottle;
 import com.anitec.backend.shared.domain.DomainException;
 import com.anitec.backend.shared.domain.FieldError;
@@ -22,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -82,10 +84,12 @@ public class AuthController {
     @PostMapping("/register")
     @Operation(summary = "Registrar cuenta (Ganadero o Veterinario) y enviar código de verificación")
     public ResponseEntity<ApiResponse<IdentityService.RegisterResult>> register(
-            @Valid @RequestBody RegisterRequest request) {
+            @Valid @RequestBody RegisterRequest request,
+            @RequestHeader(value = "Accept-Language", required = false) String language) {
         IdentityService.RegisterResult result = identityService.register(
                 new IdentityService.RegisterCommand(
-                        request.name(), request.lastName(), request.email(), request.password(), request.role()));
+                        request.name(), request.lastName(), request.email(), request.password(), request.role()),
+                EmailLanguage.fromAcceptLanguage(language));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("SENT".equals(result.emailDelivery())
                                 ? "Cuenta creada. Verifique su correo electrónico con el código enviado."
@@ -112,14 +116,15 @@ public class AuthController {
     @PostMapping("/resend-code")
     @Operation(summary = "Reenvío autorizado por credenciales: cinco por ventana fija de 24 h, cada 60 s",
             description = "Sin credenciales válidas devuelve 202 genérico sin emitir códigos ni revelar cuentas. La contraseña no crea una sesión.")
-    public ResponseEntity<?> resendCode(@Valid @RequestBody ResendCodeRequest request, HttpServletRequest http) {
+    public ResponseEntity<?> resendCode(@Valid @RequestBody ResendCodeRequest request, HttpServletRequest http,
+                                      @RequestHeader(value = "Accept-Language", required = false) String language) {
         try {
             verificationLimiter.check(http.getRemoteAddr(), "resend");
             if (!identityService.hasVerificationContext(request.email(), request.password())) {
                 return ResponseEntity.accepted().body(ApiResponse.ok("Solicitud recibida. Utilice el flujo de verificación autorizado."));
             }
             return ResponseEntity.accepted().body(ApiResponse.ok("Solicitud procesada; no garantiza entrega del correo",
-                    identityService.resendVerificationCode(request.email())));
+                    identityService.resendVerificationCode(request.email(), EmailLanguage.fromAcceptLanguage(language))));
         } catch (VerificationThrottle limit) { return throttled(limit); }
     }
 
