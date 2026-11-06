@@ -1,0 +1,18 @@
+# Always activate together with prod. The gate has no enabled/disabled switch.
+staging:
+  access:
+    key: ${STAGING_ACCESS_KEY:}
+
+email:
+  delivery:
+    mode: disabled
+    worker-enabled: false
+identity:
+  password-recovery:
+    enabled: false
+payments:
+  simulation-enabled: false
+spring:
+  flyway:
+    placeholders:
+      demo_seed: false

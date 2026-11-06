@@ -19,6 +19,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
+import org.springframework.core.env.Environment;
 
 import java.util.Arrays;
 import java.util.List;
@@ -41,7 +43,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource)
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource,
+                                                   Environment environment)
             throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -73,7 +76,9 @@ public class SecurityConfig {
                                         request.getAttribute("authenticationErrorCode") instanceof String code ? code : "INVALID_CREDENTIALS"))
                         .accessDeniedHandler((request, response, accessDeniedException) ->
                                 writeError(response, 403, "No tiene permisos para realizar esta operación", "FORBIDDEN")))
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                // Before CORS too: preflight must not bypass the staging barrier.
+                .addFilterBefore(new StagingAccessGateFilter(environment, objectMapper), CorsFilter.class);
 
         return http.build();
     }
