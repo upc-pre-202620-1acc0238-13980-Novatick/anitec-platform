@@ -1,6 +1,7 @@
 package com.anitec.backend.linking.interfaceapi;
 
 import com.anitec.backend.identity.application.IdentityQueries;
+import com.anitec.backend.identity.domain.EmailLanguage;
 import com.anitec.backend.linking.application.LinkingQueryService;
 import com.anitec.backend.linking.application.LinkingService;
 import com.anitec.backend.linking.domain.LinkingInvitation;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -59,8 +61,10 @@ public class InvitationController {
 
     @PostMapping
     @Operation(summary = "Enviar invitación a un veterinario registrado (Ganadero)")
-    public ResponseEntity<ApiResponse<InvitationResponse>> send(@Valid @RequestBody SendInvitationRequest request) {
-        LinkingInvitation invitation = linkingService.sendInvitation(CurrentUser.id(), request.vetEmail());
+    public ResponseEntity<ApiResponse<InvitationResponse>> send(@Valid @RequestBody SendInvitationRequest request,
+            @RequestHeader(value = "Accept-Language", required = false) String language) {
+        LinkingInvitation invitation = linkingService.sendInvitation(CurrentUser.id(), request.vetEmail(),
+                EmailLanguage.fromAcceptLanguage(language));
         String message = "UNCONFIRMED".equals(invitation.getEmailDelivery())
                 ? "Invitación registrada; el envío del correo no pudo confirmarse"
                 : "Invitación registrada y enviada por correo";

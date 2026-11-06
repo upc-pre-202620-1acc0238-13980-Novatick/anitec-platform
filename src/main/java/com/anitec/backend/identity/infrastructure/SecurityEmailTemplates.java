@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.List;
 
-/** No persisted language preference exists: current commands use Spanish. */
+/** Language is selected per operation; the immutable outbox payload preserves it across retries. */
 public final class SecurityEmailTemplates {
     private SecurityEmailTemplates() {}
     public static String payload(ObjectMapper json,String from,String to,String purpose,String code,String language) {

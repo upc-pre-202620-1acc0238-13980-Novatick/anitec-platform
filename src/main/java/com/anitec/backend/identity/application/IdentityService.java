@@ -1,6 +1,7 @@
 package com.anitec.backend.identity.application;
 
 import com.anitec.backend.identity.domain.Account;
+import com.anitec.backend.identity.domain.EmailLanguage;
 import com.anitec.backend.identity.domain.EmailVerificationAuthenticator;
 import com.anitec.backend.identity.domain.AccountRepository;
 import com.anitec.backend.shared.application.DomainEventDispatcher;
@@ -64,6 +65,11 @@ public class IdentityService {
 
     @Transactional
     public RegisterResult register(RegisterCommand command) {
+        return register(command, EmailLanguage.ES);
+    }
+
+    @Transactional
+    public RegisterResult register(RegisterCommand command, EmailLanguage language) {
         if (command.role() == null) {
             throw DomainException.badRequest("VALIDATION_ERROR", "role: solo GANADERO o VETERINARIO pueden registrarse");
         }
@@ -84,7 +90,7 @@ public class IdentityService {
             throw DomainException.conflict("EMAIL_ALREADY_REGISTERED", "Ya existe una cuenta con ese correo");
         }
 
-        emailDelivery.verification(account);
+        emailDelivery.verification(account, language);
         events.publish(new Account.AccountRegistered(account.getId(), account.getEmail(), account.getRole()));
         return new RegisterResult(account.getId(), account.getEmail(), "UNCONFIRMED");
     }
@@ -124,6 +130,11 @@ public class IdentityService {
 
     @Transactional
     public EmailDelivery resendVerificationCode(String email) {
+        return resendVerificationCode(email, EmailLanguage.ES);
+    }
+
+    @Transactional
+    public EmailDelivery resendVerificationCode(String email, EmailLanguage language) {
         var found = accounts.findByEmailForUpdate(Account.normalizeEmail(email));
         if (found.isEmpty()) {
             // Do not reveal whether the account exists (US26 does not cover it).
@@ -135,7 +146,7 @@ public class IdentityService {
         }
         account.issueVerificationCode(Instant.now(), verification);
         accounts.save(account);
-        emailDelivery.verification(account);
+        emailDelivery.verification(account, language);
         return new EmailDelivery(account.getEmail(), "UNCONFIRMED",
                 Account.MAX_CODE_RESENDS - account.getVerificationResends(), account.nextVerificationResendAt(Instant.now()));
     }
