@@ -138,4 +138,38 @@ class StagingAccessGateIntegrationTests {
         assertThat(request("GET","/api/v1/account/me",null,StagingAccessGateFilter.HEADER,KEY,"Authorization","Bearer "+token).statusCode()).isEqualTo(200);
         assertThat(request("POST","/api/v1/visits","{}",StagingAccessGateFilter.HEADER,KEY,"Authorization","Bearer "+token).statusCode()).isEqualTo(403);
     }
+
+    @Test void validStagingKeyAndJwtCannotActivateOrRenewSimulatedPaymentsForEitherRole() throws Exception {
+        for (Role role : List.of(Role.GANADERO, Role.VETERINARIO)) {
+            String email=UUID.randomUUID()+"@example.invalid", password="Isolated-"+UUID.randomUUID()+"aA1!";
+            String registration=mapper.writeValueAsString(Map.of("name","Test","lastName","Payment gate","email",email,"password",password,"role",role));
+            assertThat(request("POST","/api/v1/auth/register",registration,StagingAccessGateFilter.HEADER,KEY).statusCode()).isEqualTo(201);
+            var account=context.getBean(AccountRepository.class).findByEmail(email).orElseThrow();
+            String verification=mapper.writeValueAsString(Map.of("email",email,"code",TestVerificationCodes.code(account)));
+            assertThat(request("POST","/api/v1/auth/verify",verification,StagingAccessGateFilter.HEADER,KEY).statusCode()).isEqualTo(200);
+            var login=request("POST","/api/v1/auth/login",mapper.writeValueAsString(Map.of("email",email,"password",password)),StagingAccessGateFilter.HEADER,KEY);
+            assertThat(login.statusCode()).isEqualTo(200);String token=mapper.readTree(login.body()).path("data").path("accessToken").asText();
+            String[] headers={StagingAccessGateFilter.HEADER,KEY,"Authorization","Bearer "+token};
+            var plans=request("GET","/api/v1/subscription/plans",null,headers);assertThat(plans.statusCode()).isEqualTo(200);
+            UUID plan=jdbc.queryForObject("SELECT id FROM subscriptions_plans WHERE profile=? AND plan_type='PREMIUM'",UUID.class,role.name());
+            var before=request("GET","/api/v1/subscription/my-subscription",null,headers);assertThat(before.statusCode()).isEqualTo(200);
+            UUID subscription=UUID.fromString(mapper.readTree(before.body()).path("data").path("subscriptionId").asText());
+            String ref="fake_ck_"+UUID.randomUUID();
+            // Existing pending simulation data must not bypass the environment gate.
+            jdbc.update("INSERT INTO subscriptions_payments (id,subscription_id,account_id,plan_id,gateway_ref,amount,currency,status) VALUES (?,?,?,?,?,?,'PEN','PENDING')",
+                    UUID.randomUUID(),subscription,account.getId(),plan,ref,role==Role.GANADERO?new java.math.BigDecimal("19.90"):new java.math.BigDecimal("39.90"));
+            for (boolean renewal : List.of(false,true)) {
+                var response=request("POST","/api/v1/subscription/premium",mapper.writeValueAsString(Map.of("planId",plan,"renewal",renewal)),headers);
+                assertThat(response.statusCode()).isEqualTo(503);assertThat(mapper.readTree(response.body()).path("errorCode").asText()).isEqualTo("PAYMENTS_UNAVAILABLE");
+            }
+            for (String outcome : List.of("APPROVED","DECLINED")) {
+                var response=request("POST","/api/v1/subscription/premium/confirm",mapper.writeValueAsString(Map.of("checkoutId",ref,"outcome",outcome)),headers);
+                assertThat(response.statusCode()).isEqualTo(503);assertThat(mapper.readTree(response.body()).path("errorCode").asText()).isEqualTo("PAYMENTS_UNAVAILABLE");
+            }
+            var after=request("GET","/api/v1/subscription/my-subscription",null,headers);assertThat(after.statusCode()).isEqualTo(200);
+            assertThat(mapper.readTree(after.body()).path("data")).isEqualTo(mapper.readTree(before.body()).path("data"));
+            assertThat(jdbc.queryForObject("SELECT status FROM subscriptions_payments WHERE gateway_ref=?",String.class,ref)).isEqualTo("PENDING");
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM subscriptions_payments WHERE account_id=?",Long.class,account.getId())).isEqualTo(1);
+        }
+    }
 }
