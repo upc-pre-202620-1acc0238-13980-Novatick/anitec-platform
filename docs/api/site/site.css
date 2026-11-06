@@ -1,0 +1,6 @@
+body { margin: 0; background: #fafbfc; color: #19332a; font-family: system-ui, sans-serif; }
+.notice { padding: 1.3rem max(1.4rem, calc((100vw - 1460px) / 2)); background: #eaf5ef; border-bottom: 2px solid #25865a; }
+.notice h1 { margin: 0 0 .7rem; font-size: 1.6rem; }
+.notice p { margin: .45rem 0; line-height: 1.5; }
+.notice a { color: #175e40; }
+.swagger-ui .auth-wrapper, .swagger-ui .authorize, .swagger-ui .authorization__btn, .swagger-ui .try-out, .swagger-ui .execute-wrapper { display: none !important; }

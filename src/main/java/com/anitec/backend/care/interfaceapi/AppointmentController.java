@@ -56,6 +56,7 @@ public class AppointmentController {
             @Size(max = 255, message = "máximo 255 caracteres") String reason) {
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "VisitStatusRequest")
     public record StatusRequest(@NotNull(message = "obligatorio") VeterinaryAppointment.Status status) {
     }
 

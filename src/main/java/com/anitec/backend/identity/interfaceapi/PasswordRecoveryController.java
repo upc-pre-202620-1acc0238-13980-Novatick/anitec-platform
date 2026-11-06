@@ -24,9 +24,11 @@ public class PasswordRecoveryController {
     public PasswordRecoveryController(PasswordRecoveryService service,PasswordRecoveryOriginLimiter limiter,Clock clock) {
         this.service=service;this.limiter=limiter;this.clock=clock;
     }
+    @io.swagger.v3.oas.annotations.media.Schema(name = "PasswordRecoveryRequest")
     public record Request(@NotBlank @Email @Size(max=150) String email) {
         public Request { email=com.anitec.backend.identity.domain.Account.normalizeEmail(email); }
     }
+    @io.swagger.v3.oas.annotations.media.Schema(name = "PasswordRecoveryConfirm")
     public record Confirm(@NotBlank @Email @Size(max=150) String email,String code,String newPassword) {
         public Confirm { email=com.anitec.backend.identity.domain.Account.normalizeEmail(email); }
         @Override public String toString(){return "PasswordRecoveryConfirm[REDACTED]";}

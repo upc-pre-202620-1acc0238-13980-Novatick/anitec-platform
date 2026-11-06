@@ -121,7 +121,7 @@ Una interrupción del scheduler requiere supervisión operativa. No se añadió 
 
 - PlanView: id, name, profile, type, price, currency, billingPeriod, capacityLimit, active.
 - SubscriptionView: subscriptionId, planId, planName, planType, status, allowedCapacity, renewalEnabled,
-  endsAt (puede omitirse por la política NON_NULL), revision, price, currency, billingPeriod.
+  endsAt (puede ser null; NON_NULL del sobre no se propaga a ese DTO), revision, price, currency, billingPeriod.
 - CheckoutResult: checkoutId, status, planName, amount, currency. checkoutId es una referencia opaca,
   no una URL externa. El estado inicial es PENDING.
 - PaymentResultView: checkoutId, paymentStatus, subscriptionId, planType, allowedCapacity, revision, endsAt.
