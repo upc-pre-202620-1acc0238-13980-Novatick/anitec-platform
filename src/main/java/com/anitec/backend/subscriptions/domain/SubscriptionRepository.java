@@ -12,8 +12,11 @@ public interface SubscriptionRepository {
 
     Optional<Subscription> findByAccountId(UUID accountId);
 
+    /** Serializes checkout, confirmation, cancellation and expiry for this aggregate. */
+    Optional<Subscription> findByAccountIdForUpdate(UUID accountId);
+
     boolean existsByAccountId(UUID accountId);
 
-    List<Subscription> findDue(Instant now);
+    List<UUID> findDueAccountIds(Instant now);
 
 }

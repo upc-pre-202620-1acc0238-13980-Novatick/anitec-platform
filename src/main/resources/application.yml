@@ -51,7 +51,7 @@ resend:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
 
-# Simulation additionally requires the dev or test profile; prod always refuses it.
+# Simulation requires explicit opt-in plus dev/test; prod and staging always refuse it, including mixed profiles.
 payments:
   simulation-enabled: ${PAYMENTS_SIMULATION_ENABLED:false}
 

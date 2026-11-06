@@ -118,10 +118,15 @@ public class Subscription {
         this.updatedAt = now;
     }
 
-    /** Simulated renewal used by the fake gateway: extend one month, keep revision. */
-    public void extendPeriod(Instant now) {
-        this.endsAt = now.atOffset(java.time.ZoneOffset.UTC).toLocalDateTime()
+    /** A NEW approved operation extends the current paid period by one UTC calendar month. */
+    public void renewPremium(Instant now) {
+        if (!isPremium() || !renewalEnabled || isDue(now)) {
+            throw com.anitec.backend.shared.domain.DomainException.conflict("INVALID_STATE_TRANSITION",
+                    "La suscripción no admite una renovación");
+        }
+        this.endsAt = endsAt.atOffset(java.time.ZoneOffset.UTC).toLocalDateTime()
                 .plusMonths(1).atZone(java.time.ZoneId.of("UTC")).toInstant();
+        this.revision++;
         this.updatedAt = now;
     }
 
@@ -135,7 +140,7 @@ public class Subscription {
 
     public boolean isDue(Instant now) {
         return status == Status.ACTIVA && planType == Plan.PlanType.PREMIUM
-                && endsAt != null && now.isAfter(endsAt);
+                && endsAt != null && !now.isBefore(endsAt);
     }
 
     public long monthsLeft(Instant now) {

@@ -30,14 +30,18 @@ public class SubscriptionRepositoryImpl implements SubscriptionRepository {
     }
 
     @Override
+    public Optional<Subscription> findByAccountIdForUpdate(UUID accountId) {
+        return jpa.findByAccountIdForUpdate(accountId).map(SubscriptionJpaEntity::toDomain);
+    }
+
+    @Override
     public boolean existsByAccountId(UUID accountId) {
         return jpa.existsByAccountId(accountId);
     }
 
     @Override
-    public List<Subscription> findDue(Instant now) {
-        return jpa.findByEndsAtBeforeAndStatus(SubscriptionJpaEntity.toJdbc(now), Subscription.Status.ACTIVA).stream()
-                .map(SubscriptionJpaEntity::toDomain).toList();
+    public List<UUID> findDueAccountIds(Instant now) {
+        return jpa.findDueAccountIds(SubscriptionJpaEntity.toJdbc(now), Subscription.Status.ACTIVA);
     }
 
 }
