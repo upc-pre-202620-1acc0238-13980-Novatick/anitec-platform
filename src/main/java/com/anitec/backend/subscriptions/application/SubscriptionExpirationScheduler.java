@@ -20,7 +20,7 @@ public class SubscriptionExpirationScheduler {
         this.subscriptionService = subscriptionService;
     }
 
-    /** Every 30 minutes: apply expiry/renewal for due premium subscriptions (TS02). */
+    /** Every 30 minutes: expire due periods. Never creates or approves a payment. */
     @Scheduled(cron = "0 */30 * * * *")
     public void expireDueSubscriptions() {
         try {

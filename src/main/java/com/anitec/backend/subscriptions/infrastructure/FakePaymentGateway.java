@@ -9,9 +9,8 @@ import java.util.UUID;
 
 /**
  * Fake payment adapter (decision #13): simulates a checkout reference and
- * provider-side operations. A real Stripe adapter (test mode + webhook,
- * ACL translating Stripe events into this model) plugs in behind the same
- * {@link PaymentGateway} port later.
+ * operations for the academic MVP. No funds move and no external provider is contacted.
+ * A financial provider would require a separate, future integration behind the port.
  */
 public class FakePaymentGateway implements PaymentGateway {
 

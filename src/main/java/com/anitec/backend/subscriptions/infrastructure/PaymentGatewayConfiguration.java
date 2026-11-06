@@ -10,7 +10,7 @@ import org.springframework.core.env.Profiles;
 public class PaymentGatewayConfiguration {
     @Bean
     public PaymentGateway paymentGateway(Environment environment) {
-        boolean simulation = !environment.acceptsProfiles(Profiles.of("prod"))
+        boolean simulation = !environment.acceptsProfiles(Profiles.of("prod", "staging"))
                 && environment.acceptsProfiles(Profiles.of("dev", "test"))
                 && environment.getProperty("payments.simulation-enabled", Boolean.class, false);
         return simulation ? new FakePaymentGateway() : new UnavailablePaymentGateway();

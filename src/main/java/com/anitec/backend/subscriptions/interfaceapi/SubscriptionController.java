@@ -21,7 +21,7 @@ import java.util.UUID;
 /** Subscription endpoints (spec #9-#13, US22-US24). */
 @RestController
 @RequestMapping("/api/v1/subscription")
-@Tag(name = "Suscripciones", description = "Planes, pagos y estado de suscripción")
+@Tag(name = "Suscripciones", description = "Planes y suscripciones con simulación académica de pagos; sin cobros reales")
 public class SubscriptionController {
 
     private final SubscriptionService subscriptionService;
@@ -30,7 +30,7 @@ public class SubscriptionController {
         this.subscriptionService = subscriptionService;
     }
 
-    public record PremiumRequest(@NotNull(message = "obligatorio") UUID planId) {
+    public record PremiumRequest(@NotNull(message = "obligatorio") UUID planId, Boolean renewal) {
     }
 
     public record ConfirmRequest(
@@ -53,15 +53,15 @@ public class SubscriptionController {
     }
 
     @PostMapping("/premium")
-    @Operation(summary = "Contratar premium: crea el checkout (valida el perfil antes de cobrar, US23)")
+    @Operation(summary = "Preparar contratación o renovación simulada de Premium, sin cobro real (US23)")
     public ResponseEntity<ApiResponse<SubscriptionService.CheckoutResult>> requestPremium(
             @Valid @RequestBody PremiumRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Checkout creado",
-                subscriptionService.requestPremium(CurrentUser.id(), request.planId())));
+        return ResponseEntity.ok(ApiResponse.ok("Operación simulada preparada; no se realizará ningún cobro",
+                subscriptionService.requestPremium(CurrentUser.id(), request.planId(), Boolean.TRUE.equals(request.renewal()))));
     }
 
     @PostMapping("/premium/confirm")
-    @Operation(summary = "Confirmar el resultado del pago (idempotente, TS02)")
+    @Operation(summary = "Confirmar resultado ficticio de la simulación académica (idempotente, TS02)")
     public ResponseEntity<ApiResponse<SubscriptionService.PaymentResultView>> confirm(
             @Valid @RequestBody ConfirmRequest request) {
         return ResponseEntity.ok(ApiResponse.ok("Resultado procesado",

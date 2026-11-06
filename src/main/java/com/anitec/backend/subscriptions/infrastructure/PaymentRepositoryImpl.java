@@ -5,6 +5,7 @@ import com.anitec.backend.subscriptions.domain.PaymentRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 /** Infrastructure adapter for {@link PaymentRepository}. */
@@ -25,5 +26,11 @@ public class PaymentRepositoryImpl implements PaymentRepository {
     @Override
     public Optional<Payment> findByGatewayRef(String gatewayRef) {
         return jpa.findByGatewayRef(gatewayRef).map(PaymentJpaEntity::toDomain);
+    }
+
+    @Override
+    public List<Payment> findPendingBySubscriptionId(UUID subscriptionId) {
+        return jpa.findBySubscriptionIdAndStatusOrderByCreatedAtAscIdAsc(subscriptionId, Payment.Status.PENDING)
+                .stream().map(PaymentJpaEntity::toDomain).toList();
     }
 }

@@ -29,8 +29,10 @@ recuperación e invitación; en invitaciones decide el emisor, sin preferencias 
 No necesita migración. La ratificación de H/I no significaba que 13A ya implementara esos controles.
 Ver [contratos de 13B](linking-eligibility-email-i18n.md).
 
-**Etapa 14:** ciclo de pagos con Stripe Test Mode, verificación/webhooks/idempotencia y renovación/cancelación
-basadas en cobro acreditado. No mezclar pagos en etapa 13.
+**Etapa 14:** Simulated Payment Lifecycle & Subscription Stabilization. La reducción de alcance aprobada
+el 2026-11-06 sustituye Stripe por el simulador académico existente. Cada extensión requiere una nueva
+operación ficticia aprobada; no hay cobros ni proveedor financiero. Stripe, Checkout, webhooks y Google Play
+Billing quedan fuera del MVP. Ver [contrato del simulador](subscription-simulation.md). No mezclar pagos en etapa 13.
 
 **Etapa 15:** cierre de recorridos, trazabilidad completa, OpenAPI versionado, README, documentación de API
 y eventual publicación de Swagger bajo autorización separada. No habilitar Swagger público en 13A.

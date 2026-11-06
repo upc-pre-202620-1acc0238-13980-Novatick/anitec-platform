@@ -95,41 +95,60 @@ public class SubscriptionService {
 
     // -------------------------------------------------------------- commands
 
-    /** US23: start a premium checkout (profile validated BEFORE any payment). */
+    /** Existing clients initiate a purchase; renewal requires an explicit opt-in. */
     @Transactional
     public CheckoutResult requestPremium(UUID accountId, UUID planId) {
-        Subscription subscription = requireSubscription(accountId);
-        Plan plan = plans.findById(planId)
-                .orElseThrow(() -> DomainException.notFound("Plan no encontrado"));
-        if (!plan.supports(subscription.getProfile())) {
-            throw DomainException.business("PLAN_PROFILE_MISMATCH",
-                    "El plan indicado no corresponde a su perfil");
+        return requestPremium(accountId, planId, false);
+    }
+
+    /** One pending simulated operation per subscription, serialized with confirmation/cancellation. */
+    @Transactional
+    public CheckoutResult requestPremium(UUID accountId, UUID planId, boolean renewal) {
+        paymentGateway.requireSimulatedConfirmation();
+        Subscription subscription = requireSubscriptionForUpdate(accountId);
+        Plan plan = requirePurchasablePlan(subscription, planId);
+        Instant now = Instant.now();
+        // A due period is not an active renewal. Sweep/read can reconcile it; a new purchase can replace it.
+        boolean currentPremium = subscription.isPremium() && !subscription.isDue(now);
+        if (renewal && (!currentPremium || !subscription.isRenewalEnabled())) {
+            throw DomainException.conflict("INVALID_STATE_TRANSITION", "No tiene una renovación habilitada");
         }
-        if (!plan.isPremium()) {
-            throw DomainException.badRequest("VALIDATION_ERROR", "planId: indique un plan premium");
+        if (currentPremium && (!renewal || !subscription.getPlanId().equals(planId))) {
+            throw DomainException.conflict("INVALID_STATE_TRANSITION", "Ya tiene activo este plan premium");
         }
-        if (subscription.isPremium() && subscription.getPlanId().equals(planId)) {
-            throw DomainException.conflict("INVALID_STATE_TRANSITION",
-                    "Ya tiene activo este plan premium");
+        List<Payment> pending = payments.findPendingBySubscriptionId(subscription.getId());
+        if (!pending.isEmpty()) {
+            Payment existing = pending.getFirst();
+            if (!existing.getPlanId().equals(planId)) {
+                throw DomainException.conflict("INVALID_STATE_TRANSITION", "Existe una operación pendiente");
+            }
+            return new CheckoutResult(existing.getGatewayRef(), existing.getStatus().name(), plan.getName(),
+                    existing.getAmount(), existing.getCurrency());
         }
         String checkoutRef = paymentGateway.createCheckout(accountId, plan);
         Payment payment = Payment.pending(subscription.getId(), accountId, plan.getId(), checkoutRef,
-                plan.getPrice(), plan.getCurrency(), Instant.now());
+                plan.getPrice(), plan.getCurrency(), now);
         payments.save(payment);
         return new CheckoutResult(checkoutRef, payment.getStatus().name(), plan.getName(),
-                plan.getPrice(), plan.getCurrency());
+                payment.getAmount(), payment.getCurrency());
     }
 
     /** TS02: idempotent confirmation - replays never duplicate effects. */
     @Transactional
     public PaymentResultView confirmPayment(UUID accountId, String checkoutId, PaymentOutcome outcome) {
         paymentGateway.requireSimulatedConfirmation();
+        Subscription subscription = requireSubscriptionForUpdate(accountId);
         Payment payment = payments.findByGatewayRef(checkoutId)
                 .orElseThrow(() -> DomainException.notFound("Pago no encontrado"));
         if (!payment.belongsTo(accountId)) {
             throw DomainException.forbidden("El pago no pertenece a su cuenta");
         }
-        Subscription subscription = requireSubscription(payment.getAccountId());
+        if (!payment.getSubscriptionId().equals(subscription.getId())) {
+            throw DomainException.forbidden("El pago no pertenece a su suscripción");
+        }
+        if (outcome == null) {
+            throw DomainException.badRequest("VALIDATION_ERROR", "outcome: obligatorio");
+        }
 
         if (payment.getStatus() != Payment.Status.PENDING) {
             // Already processed: report current state without applying effects again.
@@ -143,11 +162,19 @@ public class SubscriptionService {
             return toPaymentResult(payment, subscription);
         }
 
-        Plan plan = plans.findById(payment.getPlanId())
-                .orElseThrow(() -> DomainException.notFound("Plan no encontrado"));
+        Plan plan = requirePurchasablePlan(subscription, payment.getPlanId());
+        if (subscription.isPremium() && !subscription.isDue(now)) {
+            if (!subscription.getPlanId().equals(plan.getId())) {
+                throw DomainException.conflict("INVALID_STATE_TRANSITION", "El plan no coincide con la suscripción vigente");
+            }
+            subscription.renewPremium(now);
+        } else {
+            subscription.activatePremium(plan, now);
+        }
         payment.applyResult(Payment.Status.APPROVED, now);
-        subscription.activatePremium(plan, now);
+        // Defensive reconciliation of legacy duplicate pending operations; never credit them automatically.
         payments.save(payment);
+        declinePending(subscription, now);
         subscriptions.save(subscription);
         events.publish(new Subscription.PremiumActivated(subscription.getAccountId(),
                 subscription.getProfile(), plan.getCapacityLimit(), subscription.getRevision()));
@@ -157,11 +184,12 @@ public class SubscriptionService {
     /** US24: cancel renewal; premium is kept until endsAt (idempotent). */
     @Transactional
     public SubscriptionView cancelRenewal(UUID accountId) {
-        Subscription subscription = requireSubscription(accountId);
+        Subscription subscription = requireSubscriptionForUpdate(accountId);
         if (subscription.getPlanType() != Plan.PlanType.PREMIUM) {
             throw DomainException.business("INVALID_STATE_TRANSITION",
                     "No tiene una suscripción premium activa");
         }
+        declinePending(subscription, Instant.now());
         if (subscription.cancelRenewal()) {
             subscriptions.save(subscription);
             events.publish(new Subscription.RenewalCancelled(accountId));
@@ -174,25 +202,12 @@ public class SubscriptionService {
     public int expireDueSubscriptions() {
         Instant now = Instant.now();
         int processed = 0;
-        for (Subscription subscription : subscriptions.findDue(now)) {
-            if (subscription.getPlanType() != Plan.PlanType.PREMIUM
-                    || subscription.getStatus() != Subscription.Status.ACTIVA) {
-                continue;
+        // Scalar candidates avoid caching stale aggregates before the per-account lock.
+        for (UUID accountId : subscriptions.findDueAccountIds(now)) {
+            Subscription subscription = requireSubscriptionForUpdate(accountId);
+            if (expireIfDue(subscription, Instant.now())) {
+                processed++;
             }
-            if (subscription.isRenewalEnabled()) {
-                // Fake gateway: renewal succeeded, extend the paid period.
-                subscription.extendPeriod(now);
-                subscriptions.save(subscription);
-                continue;
-            }
-            Plan freePlan = plans.findFreeByProfile(subscription.getProfile())
-                    .orElseThrow(() -> DomainException.internal(
-                            "No existe el plan gratuito para el perfil " + subscription.getProfile()));
-            subscription.expire(freePlan, now);
-            subscriptions.save(subscription);
-            events.publish(new Subscription.PremiumExpired(subscription.getAccountId(),
-                    subscription.getProfile(), freePlan.getCapacityLimit(), subscription.getRevision()));
-            processed++;
         }
         return processed;
     }
@@ -208,16 +223,52 @@ public class SubscriptionService {
                 .map(PlanView::from).toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public SubscriptionView mySubscription(UUID accountId) {
-        return toView(requireSubscription(accountId));
+        Subscription subscription = requireSubscriptionForUpdate(accountId);
+        expireIfDue(subscription, Instant.now());
+        return toView(subscription);
     }
 
     // -------------------------------------------------------------- helpers
 
-    private Subscription requireSubscription(UUID accountId) {
-        return subscriptions.findByAccountId(accountId)
+    private Subscription requireSubscriptionForUpdate(UUID accountId) {
+        return subscriptions.findByAccountIdForUpdate(accountId)
                 .orElseThrow(() -> DomainException.notFound("Suscripción no encontrada"));
+    }
+
+    private Plan requirePurchasablePlan(Subscription subscription, UUID planId) {
+        Plan plan = plans.findById(planId).orElseThrow(() -> DomainException.notFound("Plan no encontrado"));
+        if (!plan.supports(subscription.getProfile())) {
+            throw DomainException.business("PLAN_PROFILE_MISMATCH", "El plan indicado no corresponde a su perfil");
+        }
+        if (!plan.isPremium()) {
+            throw DomainException.badRequest("VALIDATION_ERROR", "planId: indique un plan premium");
+        }
+        if (!plan.isActive()) {
+            throw DomainException.business("PLAN_UNAVAILABLE", "El plan no está disponible");
+        }
+        return plan;
+    }
+
+    private void declinePending(Subscription subscription, Instant now) {
+        for (Payment pending : payments.findPendingBySubscriptionId(subscription.getId())) {
+            pending.applyResult(Payment.Status.DECLINED, now);
+            payments.save(pending);
+        }
+    }
+
+    private boolean expireIfDue(Subscription subscription, Instant now) {
+        if (!subscription.isDue(now)) {
+            return false;
+        }
+        Plan freePlan = plans.findFreeByProfile(subscription.getProfile())
+                .orElseThrow(() -> DomainException.internal("No existe el plan gratuito para el perfil"));
+        subscription.expire(freePlan, now);
+        subscriptions.save(subscription);
+        events.publish(new Subscription.PremiumExpired(subscription.getAccountId(), subscription.getProfile(),
+                freePlan.getCapacityLimit(), subscription.getRevision()));
+        return true;
     }
 
     private SubscriptionView toView(Subscription subscription) {
