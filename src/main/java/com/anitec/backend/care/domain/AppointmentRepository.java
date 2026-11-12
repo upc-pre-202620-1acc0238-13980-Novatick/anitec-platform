@@ -16,4 +16,6 @@ public interface AppointmentRepository {
 
     List<VeterinaryAppointment> findByVeterinarianAndRange(UUID veterinarianId, java.time.Instant from,
                                                            java.time.Instant to);
+
+    List<VeterinaryAppointment> findUpcomingByOwner(UUID ownerId, java.time.Instant now);
 }

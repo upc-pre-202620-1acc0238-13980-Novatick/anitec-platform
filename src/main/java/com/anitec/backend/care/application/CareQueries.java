@@ -71,6 +71,11 @@ public class CareQueries {
                                   String reason) {
     }
 
+    public record FarmerAppointmentView(UUID id, UUID animalId, String animalName, String animalCode,
+                                        String farmerName, String vetName, String type, Instant scheduledAt,
+                                        String status, String reason) {
+    }
+
     // ------------------------------------------------------------- queries
 
     public List<AttentionSummary> recentForAnimal(UUID animalId, int limit) {
@@ -146,6 +151,33 @@ public class CareQueries {
     public VeterinaryAppointment requireVisit(UUID appointmentId) {
         return appointments.findById(appointmentId)
                 .orElseThrow(() -> DomainException.notFound("Cita no encontrada"));
+    }
+
+    /** Owner identity comes exclusively from the authenticated farmer, never request parameters. */
+    public List<FarmerAppointmentView> upcomingForFarmer(UUID farmerId, Instant now) {
+        var farmIds = livestockQueries.farmsOf(farmerId).stream()
+                .map(com.anitec.backend.livestock.domain.Farm::getId).collect(Collectors.toSet());
+        if (farmIds.isEmpty()) return List.of();
+
+        List<VeterinaryAppointment> found = appointments.findUpcomingByOwner(farmerId, now);
+        var animals = found.stream().map(VeterinaryAppointment::getAnimalId).distinct()
+                .map(livestockQueries::findAnimal).flatMap(java.util.Optional::stream)
+                .filter(animal -> farmerId.equals(animal.getOwnerId()) && farmIds.contains(animal.getFarmId()))
+                .collect(Collectors.toMap(com.anitec.backend.livestock.domain.Animal::getId, Function.identity()));
+        var visible = found.stream().filter(appointment -> animals.containsKey(appointment.getAnimalId())).toList();
+        var identityIds = visible.stream().map(VeterinaryAppointment::getVeterinarianId)
+                .collect(Collectors.toSet());
+        identityIds.add(farmerId);
+        var names = identityQueries.displayNames(identityIds);
+        return visible.stream().map(appointment -> {
+            var animal = animals.get(appointment.getAnimalId());
+            return new FarmerAppointmentView(appointment.getId(), animal.getId(),
+                    animal.getName() == null ? animal.codeValue() : animal.getName(), animal.codeValue(),
+                    names.getOrDefault(farmerId, "Ganadero"),
+                    names.getOrDefault(appointment.getVeterinarianId(), "Veterinario"),
+                    appointment.getType().name(), appointment.getScheduledAt(),
+                    appointment.getStatus().name(), appointment.getReason());
+        }).toList();
     }
 
     // ------------------------------------------------------------- helpers

@@ -20,4 +20,7 @@ public interface AppointmentJpaRepository extends JpaRepository<AppointmentJpaEn
 
     List<AppointmentJpaEntity> findByVeterinarianIdAndScheduledAtBetweenOrderByScheduledAtAsc(
             UUID veterinarianId, OffsetDateTime from, OffsetDateTime to);
+
+    List<AppointmentJpaEntity> findByOwnerIdAndStatusAndScheduledAtAfterOrderByScheduledAtAscIdAsc(
+            UUID ownerId, VeterinaryAppointment.Status status, OffsetDateTime now);
 }

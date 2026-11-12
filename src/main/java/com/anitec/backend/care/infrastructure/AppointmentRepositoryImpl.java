@@ -43,4 +43,11 @@ public class AppointmentRepositoryImpl implements AppointmentRepository {
                         OffsetDateTime.ofInstant(to, ZoneOffset.UTC))
                 .stream().map(AppointmentJpaEntity::toDomain).toList();
     }
+
+    @Override
+    public List<VeterinaryAppointment> findUpcomingByOwner(UUID ownerId, Instant now) {
+        return jpa.findByOwnerIdAndStatusAndScheduledAtAfterOrderByScheduledAtAscIdAsc(ownerId,
+                        VeterinaryAppointment.Status.PROGRAMADA, OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
+                .stream().map(AppointmentJpaEntity::toDomain).toList();
+    }
 }

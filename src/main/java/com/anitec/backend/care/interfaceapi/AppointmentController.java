@@ -119,4 +119,13 @@ public class AppointmentController {
             throw DomainException.forbidden("Esta operación es exclusiva del perfil veterinario");
         }
     }
+
+    @GetMapping("/upcoming")
+    @Operation(summary = "Próximas visitas y controles de los animales del ganadero autenticado")
+    public ResponseEntity<ApiResponse<List<CareQueries.FarmerAppointmentView>>> upcomingForFarmer() {
+        if (CurrentUser.role() != Role.GANADERO) {
+            throw DomainException.forbidden("Esta operación es exclusiva del perfil ganadero");
+        }
+        return ResponseEntity.ok(ApiResponse.ok(careQueries.upcomingForFarmer(CurrentUser.id(), Instant.now())));
+    }
 }
