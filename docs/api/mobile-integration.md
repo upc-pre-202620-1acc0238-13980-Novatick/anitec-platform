@@ -151,6 +151,7 @@ Use las rutas/DTO exactos de [OpenAPI](openapi.yaml); no enviar contratos diseñ
 | Invitaciones | POST /invitations, GET /invitations/pending y PUT /invitations/{invitationId}/respond con ACCEPT/REJECT; solo destinatario elegible acepta |
 | Vínculos | /vet-links y /vet-links/my-farmers según rol; DELETE /vet-links/{linkId} solo ganadero propietario |
 | Agenda | GET /visits con from/to UTC y programación en /visits/schedule; pertenece al veterinario, no al ganadero |
+| Próximas visitas del ganadero | GET /visits/upcoming; solo GANADERO, todas las citas futuras PROGRAMADA de sus animales y fincas, sin límite de 30 días |
 | Atención | POST /attentions con fecha y descripción; visitId opcional. Máximo una atención por cita/control, varias independientes por animal |
 | Seguimiento | /visits/follow-up referencia attentionId; su control puede tener su propia atención |
 | Historial | GET /animals/{animalId}/medical-history; revocar quita acceso al veterinario y conserva lectura/historial del ganadero |
@@ -164,6 +165,47 @@ otra atención de la misma cita. Atención clínica y complementos respetan auto
 
 Para una finca sin location, mostrar **Ubicación no registrada**. La visita identifica al animal y permite
 consultar la finca autorizada; no hay una dirección geográfica nueva ni una ubicación persistida por cita.
+
+### Próximas visitas del GANADERO
+
+`GET /api/v1/visits/upcoming` exige `Authorization: Bearer <accessToken>` y cuenta GANADERO
+activa/verificada con sesión vigente. En staging privado sigue siendo obligatoria la barrera de acceso
+del entorno. VETERINARIO recibe **403 FORBIDDEN**; sin JWT válido se conserva el **401** oficial.
+`GET /api/v1/visits` sigue siendo exclusivamente la agenda del veterinario y no cambia su contrato.
+
+Respuesta **200**, sobre `ApiResponse<List<FarmerAppointmentView>>`; `data` es `[]` si no hay citas:
+
+```json
+{
+  "success": true,
+  "message": "Operación realizada con éxito",
+  "data": [{
+    "id": "11111111-1111-4111-8111-111111111111",
+    "animalId": "22222222-2222-4222-8222-222222222222",
+    "animalName": "Nina",
+    "animalCode": "AN-000001",
+    "farmerName": "Ganadero Prueba",
+    "vetName": "Veterinario Prueba",
+    "type": "VISITA",
+    "scheduledAt": "2035-06-01T14:30:00Z",
+    "status": "PROGRAMADA",
+    "reason": "Evaluación"
+  }],
+  "timestamp": "2035-06-01T12:00:00Z"
+}
+```
+
+`type` es `VISITA` o `CONTROL`; `reason` puede ser null. `animalName` utiliza el código si el
+animal no tiene nombre. Los nombres corresponden a los perfiles actuales. El listado incluye únicamente
+`scheduledAt > ahora del servidor` y estado `PROGRAMADA`, ordenado por fecha ascendente y UUID para
+desempatar. Kotlin debe convertir el instante UTC a la zona del usuario para presentarlo.
+
+No hay paginación, truncamiento ni filtros en este contrato: una llamada devuelve todas las citas
+que cumplen esas condiciones, de todas las fincas y veterinarios correspondientes. No enviar ownerId,
+farmerId, animalId, from/to, page/size ni status: parámetros desconocidos no amplían el alcance.
+La identidad se obtiene del JWT; se verifica también la propiedad actual del animal y de su finca.
+La lectura del propietario no requiere una vinculación veterinaria activa; revocar el vínculo no
+cancela automáticamente una cita ni concede al veterinario acceso adicional.
 
 ## Planes y pago simulado
 

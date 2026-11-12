@@ -162,6 +162,9 @@ public class OpenApiConfig {
             nullable(api,"AnimalListItem","name");
             nullable(api,"FarmResponse","location");
             nullable(api,"AppointmentView","animalName","reason");
+            nullable(api,"FarmerAppointmentView","reason");
+            enumProperty(api,"FarmerAppointmentView","type",List.of("VISITA","CONTROL"));
+            enumProperty(api,"FarmerAppointmentView","status",List.of("PROGRAMADA"));
             nullable(api,"VisitResponse","reason");
             nullable(api,"AttentionDetail","instructions");
             nullable(api,"SubscriptionView","endsAt");
@@ -189,6 +192,7 @@ public class OpenApiConfig {
     }
     private static List<String> roles(String verb,String path){
         if(path.startsWith("/api/v1/auth/"))return List.of();
+        if(path.equals("/api/v1/visits/upcoming")&&verb.equals("GET"))return List.of("GANADERO");
         if(path.startsWith("/api/v1/visits")||(path.startsWith("/api/v1/attentions")&&!verb.equals("GET"))||path.equals("/api/v1/invitations/pending")||path.endsWith("/respond")||path.equals("/api/v1/vet-links/my-farmers")||path.equals("/api/v1/vet-links/capacity"))return List.of("VETERINARIO");
         if((path.startsWith("/api/v1/animals")&&(!verb.equals("GET")||path.endsWith("/capacity")))||(path.equals("/api/v1/farms")&&verb.equals("POST"))||(path.equals("/api/v1/invitations")&&verb.equals("POST"))||(path.startsWith("/api/v1/vet-links/")&&verb.equals("DELETE")))return List.of("GANADERO");
         return List.of("GANADERO","VETERINARIO");

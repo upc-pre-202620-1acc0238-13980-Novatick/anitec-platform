@@ -758,6 +758,37 @@
         "required" : [ "message", "success", "timestamp" ],
         "type" : "object"
       },
+      "ApiResponseListFarmerAppointmentView" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FarmerAppointmentView"
+            },
+            "type" : "array"
+          },
+          "details" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FieldError"
+            },
+            "type" : "array"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          },
+          "timestamp" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "message", "success", "timestamp" ],
+        "type" : "object"
+      },
       "ApiResponseListObservationResponse" : {
         "properties" : {
           "data" : {
@@ -1486,6 +1517,47 @@
           },
           "ownerId" : {
             "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "FarmerAppointmentView" : {
+        "properties" : {
+          "animalCode" : {
+            "type" : "string"
+          },
+          "animalId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "animalName" : {
+            "type" : "string"
+          },
+          "farmerName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "reason" : {
+            "nullable" : true,
+            "type" : "string"
+          },
+          "scheduledAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PROGRAMADA" ],
+            "type" : "string"
+          },
+          "type" : {
+            "enum" : [ "CONTROL", "VISITA" ],
+            "type" : "string"
+          },
+          "vetName" : {
             "type" : "string"
           }
         },
@@ -7177,6 +7249,81 @@
         "tags" : [ "Visitas" ],
         "x-module" : "care",
         "x-roles" : [ "VETERINARIO" ]
+      }
+    },
+    "/api/v1/visits/upcoming" : {
+      "get" : {
+        "description" : "Autorización: GANADERO, con cuenta activa/verificada y sesión vigente. ",
+        "operationId" : "get_api_v1_visits_upcoming",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListFarmerAppointmentView"
+                }
+              }
+            },
+            "description" : "Operación correcta"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description" : "Credencial/sesión inválida o vencida: INVALID_CREDENTIALS, SESSION_INVALID o ACCESS_TOKEN_EXPIRED; login también puede informar EMAIL_NOT_VERIFIED o ACCOUNT_SUSPENDED"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description" : "FORBIDDEN por permisos o STAGING_ACCESS_DENIED por barrera de staging"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description" : "NOT_FOUND: recurso referenciado inexistente"
+          },
+          "500" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description" : "INTERNAL_ERROR: fallo inesperado sanitizado"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description" : "AUTHENTICATION_UNAVAILABLE: no se pudo comprobar la sesión; las rutas de simulación también devuelven PAYMENTS_UNAVAILABLE si no están autorizadas"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ],
+        "summary" : "Próximas visitas y controles de los animales del ganadero autenticado",
+        "tags" : [ "Visitas" ],
+        "x-module" : "care",
+        "x-roles" : [ "GANADERO" ]
       }
     },
     "/api/v1/visits/{visitId}/status" : {
